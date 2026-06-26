@@ -7,10 +7,10 @@
 #define BORDER_WIDTH 2
 
 /* inner gap between windows */
-#define INNER_GAP 8
+#define INNER_GAP 15
 
 /* outer gap - screen edge padding */
-#define OUTER_GAP 8
+#define OUTER_GAP 50
 
 /* snap distance for mouse resize */
 #define SNAP 32
