@@ -2,7 +2,7 @@
 a scrolling x11 window manager.
 
 <p align="center">
-  <img src="assets/an225_000.png" alt="Alt text" width="700">
+  <img src="assets/better.png" alt="img" width="700">
 </p>
 
 # what is it?
