@@ -9,10 +9,6 @@ a scrolling x11 window manager.
 
 mriya is a scrolling x11 window-manager inspired by niri, i3wm and plan9's rio. 
 
-# fyi 
-
-- floating mode is non-functional, will fix.
-
 # why use this?
 
 - simple codebase
