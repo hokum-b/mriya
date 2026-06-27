@@ -26,13 +26,23 @@
 #define MODKEY Mod4Mask
 
 /* mouse events mask */
-#define MOUSEMASK (ButtonPressMask|ButtonReleaseMask)
+#define MOUSEMASK (ButtonPressMask|ButtonReleaseMask|PointerMotionMask)
 
 /* default programs */
 #define TERM "st"
 #define DMENU "dmenu_run"
 #define BROWSER "firefox"
 #define FILEMANAGER "pcmanfm"
+
+/* volume and brightness controls
+ * requires: alsa-utils (amixer) and brightnessctl
+ * alternatives: pulseaudio/pipewire (pactl), xbacklight
+ */
+#define VOL_UP    "amixer -q set Master 5%+"
+#define VOL_DOWN  "amixer -q set Master 5%-"
+#define VOL_MUTE  "amixer -q set Master toggle"
+#define BRI_UP    "brightnessctl -q set +5%"
+#define BRI_DOWN  "brightnessctl -q set 5%-"
 
 /* scroll wheel switches workspaces. 1 = on, 0 = off */
 #define SCROLL_WHEEL_WS 1
@@ -75,5 +85,8 @@ static const Layout layouts[] = {
     { MODKEY|ControlMask, KEY, toggleview, #TAG }, \
     { MODKEY|ShiftMask, KEY, tag, #TAG }, \
     { MODKEY|ControlMask|ShiftMask, KEY, toggletag, #TAG },
+
+/* 1 to attach new windows at the end of the stack, 0 to attach at the beginning */
+#define INSERT_END 1
 
 #endif
