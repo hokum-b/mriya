@@ -200,7 +200,6 @@ static void updatestatus(void);
 static void updatetitle(Client *c);
 static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
-static void updatestruts(Client *c);
 static void view(const char *arg);
 static Client *wintoclient(Window w);
 static Monitor *wintomon(Window w);
@@ -348,11 +347,17 @@ static Monitor *createmon(int num, int x, int y, int w, int h) {
 }
 
 static int updategeom(void) {
+    int dirty = 0;
     if (!mons) {
         mons = createmon(0, 0, 0, sw, sh);
         selmon = mons;
+        dirty = 1;
+    } else if (mons->width != sw || mons->height != sh) {
+        mons->width = sw;
+        mons->height = sh;
+        dirty = 1;
     }
-    return 1;
+    return dirty;
 }
 
 static Client *wintoclient(Window w) {
@@ -426,32 +431,6 @@ static void updatewmhints(Client *c) {
         } else
             c->urgent = (wmh->flags & XUrgencyHint) ? 1 : 0;
         XFree(wmh);
-    }
-}
-
-static void updatestruts(Client *c) {
-    int format;
-    unsigned long n, extra;
-    unsigned char *p = NULL;
-    Atom real;
-    if (c->monitor && c->ispanel) {
-        if (XGetWindowProperty(dpy, c->window, netatom[NetWMStrutPartial],
-                0L, 12L, False, XA_CARDINAL, &real, &format, &n, &extra, &p) == Success && p) {
-            if (n >= 4 && format == 32) {
-                long *struts = (long *)p;
-                c->monitor->bh = struts[2];
-                c->monitor->bbh = struts[3];
-            }
-            XFree(p);
-        } else if (XGetWindowProperty(dpy, c->window, netatom[NetWMStrut],
-                0L, 4L, False, XA_CARDINAL, &real, &format, &n, &extra, &p) == Success && p) {
-            if (n >= 4 && format == 32) {
-                long *struts = (long *)p;
-                c->monitor->bh = struts[2];
-                c->monitor->bbh = struts[3];
-            }
-            XFree(p);
-        }
     }
 }
 
@@ -587,29 +566,48 @@ static void grabkeys(void) {
 static int get_total_strip_width(Monitor *m) {
     Client *c;
     int total = 2 * outer_gaps;
-    int col_w = (m->width - 2 * outer_gaps - inner_gaps - 4 * BORDER_WIDTH) / 2;
-    if (col_w < 200) col_w = 200;
+    int usable = m->width - 2 * outer_gaps - 4 * BORDER_WIDTH;
+    int col_w = (usable - inner_gaps) / 2;
+    int actual_inner = usable - 2 * col_w;
+    if (col_w < 200) { col_w = 200; actual_inner = inner_gaps; }
+
     for (c = m->clients; c; c = c->next) {
         if (!ISVISIBLE(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN) continue;
         if (c->state == STATE_MAXIMIZED)
-            total += c->width + 2 * BORDER_WIDTH;
+            total += c->width + 2 * c->border_width;
         else
-            total += col_w + 2 * BORDER_WIDTH;
-        total += inner_gaps;
+            total += col_w + 2 * c->border_width;
+        total += actual_inner;
     }
     if (total > 2 * outer_gaps)
-        total -= inner_gaps;
+        total -= actual_inner;
     return total;
 }
 
 static void arrange(Monitor *m) {
     Client *c;
     int total_width = 0;
-    int mon_y = m->y + m->bh;
-    int mon_h = m->height - m->bh - m->bbh;
-    int col_w = (m->width - 2 * outer_gaps - inner_gaps - 4 * BORDER_WIDTH) / 2;
-    int tile_h = mon_h - 2 * outer_gaps - 2 * BORDER_WIDTH;
-    if (col_w < 200) col_w = 200;
+    int mon_y = m->y;
+    int mon_h = m->height;
+    int usable = m->width - 2 * outer_gaps - 4 * BORDER_WIDTH;
+    int col_w = (usable - inner_gaps) / 2;
+    int actual_inner = usable - 2 * col_w;
+    if (col_w < 200) { col_w = 200; actual_inner = inner_gaps; }
+
+    int total = get_total_strip_width(m);
+    if (total < m->width) {
+#if STRIP_ALIGN == 0
+        m->scroll_x = 0;
+#elif STRIP_ALIGN == 1
+        m->scroll_x = m->width - total;
+#else
+        m->scroll_x = (m->width - total) / 2;
+#endif
+    } else {
+        int max_scroll = -(total - m->width);
+        if (m->scroll_x > 0) m->scroll_x = 0;
+        if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
+    }
 
     for (c = m->clients; c; c = c->next) {
         if (!ISVISIBLE(c)) {
@@ -628,23 +626,19 @@ static void arrange(Monitor *m) {
         }
         c->x = m->x + outer_gaps + total_width + m->scroll_x;
         c->y = mon_y + outer_gaps;
-        c->height = tile_h;
+        c->height = mon_h - 2 * outer_gaps - 2 * c->border_width;
+
         if (c->state == STATE_MAXIMIZED) {
             resize(c, c->x, c->y, c->width, c->height, 0);
             XSetWindowBorder(dpy, c->window, c == m->sel ? col_sel_border : col_norm_border);
-            total_width += c->width + 2 * BORDER_WIDTH + inner_gaps;
+            total_width += c->width + 2 * c->border_width + actual_inner;
             continue;
         }
         c->width = col_w;
         resize(c, c->x, c->y, c->width, c->height, 0);
         XSetWindowBorder(dpy, c->window, c == m->sel ? col_sel_border : col_norm_border);
-        total_width += col_w + 2 * BORDER_WIDTH + inner_gaps;
+        total_width += col_w + 2 * c->border_width + actual_inner;
     }
-    int total = get_total_strip_width(m);
-    int max_scroll = -(total - m->width);
-    if (max_scroll > 0) max_scroll = 0;
-    if (m->scroll_x > 0) m->scroll_x = 0;
-    if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
 }
 
 static void tile(Monitor *m) {
@@ -654,14 +648,14 @@ static void tile(Monitor *m) {
 static void monocle(Monitor *m) {
     unsigned int n = 0;
     Client *c;
-    int mon_y = m->y + m->bh;
-    int mon_h = m->height - m->bh - m->bbh;
+    int mon_y = m->y;
+    int mon_h = m->height;
     for (c = m->clients; c; c = c->next)
         if (ISVISIBLE(c)) n++;
     if (n > 0)
         for (c = m->clients; c; c = c->next)
             if (ISVISIBLE(c))
-                resize(c, m->x + outer_gaps, mon_y + outer_gaps, m->width - 2 * outer_gaps - 2 * BORDER_WIDTH, mon_h - 2 * outer_gaps - 2 * BORDER_WIDTH, 0);
+                resize(c, m->x + outer_gaps, mon_y + outer_gaps, m->width - 2 * outer_gaps - 2 * c->border_width, mon_h - 2 * outer_gaps - 2 * c->border_width, 0);
 }
 
 static void restack(Monitor *m) {
@@ -672,11 +666,11 @@ static void restack(Monitor *m) {
         arrange(m);
         return;
     }
+    for (c = m->stack; c; c = c->next_stack)
+        if (c->state == STATE_FLOATING && ISVISIBLE(c) && c != m->sel)
+            XRaiseWindow(dpy, c->window);
     if (m->sel->state == STATE_FLOATING)
         XRaiseWindow(dpy, m->sel->window);
-    for (c = m->stack; c; c = c->next_stack)
-        if (c->state == STATE_FLOATING && ISVISIBLE(c))
-            XRaiseWindow(dpy, c->window);
     arrange(m);
     XSync(dpy, False);
     while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
@@ -768,8 +762,8 @@ static void ws_down(const char *arg) {
 
 static void setgaps(const char *arg) {
     if (arg[0] == '0') { inner_gaps = INNER_GAP; outer_gaps = OUTER_GAP; }
-    else if (arg[0] == '-') inner_gaps -= 2;
-    else if (arg[0] == '+') inner_gaps += 2;
+    else if (arg[0] == '-') { inner_gaps -= 2; outer_gaps -= 2; }
+    else if (arg[0] == '+') { inner_gaps += 2; outer_gaps += 2; }
     if (inner_gaps < 0) inner_gaps = 0;
     if (outer_gaps < 0) outer_gaps = 0;
     arrange(selmon);
@@ -779,25 +773,27 @@ static void ensure_visible(Client *c) {
     Monitor *m = selmon;
     Client *cl;
     int pos = 0, found = 0;
-    int col_w = (m->width - 2 * outer_gaps - inner_gaps - 4 * BORDER_WIDTH) / 2;
+    int usable = m->width - 2 * outer_gaps - 4 * BORDER_WIDTH;
+    int col_w = (usable - inner_gaps) / 2;
+    int actual_inner = usable - 2 * col_w;
+    if (col_w < 200) { col_w = 200; actual_inner = inner_gaps; }
     int win_w;
 
-    if (col_w < 200) col_w = 200;
     if (!c || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN) return;
 
     for (cl = m->clients; cl; cl = cl->next) {
         if (!ISVISIBLE(cl) || cl->state == STATE_FLOATING || cl->state == STATE_FULLSCREEN) continue;
         if (cl == c) { found = 1; break; }
         if (cl->state == STATE_MAXIMIZED)
-            pos += cl->width + 2 * BORDER_WIDTH + inner_gaps;
+            pos += cl->width + 2 * cl->border_width + actual_inner;
         else
-            pos += col_w + 2 * BORDER_WIDTH + inner_gaps;
+            pos += col_w + 2 * cl->border_width + actual_inner;
     }
     if (!found) return;
 
     if (c->state == STATE_MAXIMIZED) {
         int target_x = m->x + outer_gaps + m->scroll_x + pos;
-        int target_right = target_x + c->width + 2 * BORDER_WIDTH;
+        int target_right = target_x + c->width + 2 * c->border_width;
         int screen_right = m->x + m->width - outer_gaps;
         int screen_left = m->x + outer_gaps;
 
@@ -805,31 +801,33 @@ static void ensure_visible(Client *c) {
             m->scroll_x += screen_left - target_x;
         else if (target_right > screen_right)
             m->scroll_x -= target_right - screen_right;
+    } else {
+        win_w = col_w + 2 * c->border_width;
+        int win_left = m->x + outer_gaps + pos + m->scroll_x;
+        int win_right = win_left + win_w;
+        int bound_left = m->x + outer_gaps;
+        int bound_right = m->x + m->width - outer_gaps;
 
-        int total = get_total_strip_width(m);
-        int max_scroll = -(total - m->width);
-        if (max_scroll > 0) max_scroll = 0;
-        if (m->scroll_x > 0) m->scroll_x = 0;
-        if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
-        return;
+        if (win_left < bound_left)
+            m->scroll_x += bound_left - win_left;
+        else if (win_right > bound_right)
+            m->scroll_x -= win_right - bound_right;
     }
 
-    win_w = col_w + 2 * BORDER_WIDTH;
-    int win_left = m->x + outer_gaps + pos + m->scroll_x;
-    int win_right = win_left + win_w;
-    int bound_left = m->x + outer_gaps;
-    int bound_right = m->x + m->width - outer_gaps;
-
-    if (win_left < bound_left)
-        m->scroll_x += bound_left - win_left;
-    else if (win_right > bound_right)
-        m->scroll_x -= win_right - bound_right;
-
     int total = get_total_strip_width(m);
-    int max_scroll = -(total - m->width);
-    if (max_scroll > 0) max_scroll = 0;
-    if (m->scroll_x > 0) m->scroll_x = 0;
-    if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
+    if (total < m->width) {
+#if STRIP_ALIGN == 0
+        m->scroll_x = 0;
+#elif STRIP_ALIGN == 1
+        m->scroll_x = m->width - total;
+#else
+        m->scroll_x = (m->width - total) / 2;
+#endif
+    } else {
+        int max_scroll = -(total - m->width);
+        if (m->scroll_x > 0) m->scroll_x = 0;
+        if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
+    }
 }
 
 static void focusleft(const char *arg) {
@@ -912,8 +910,6 @@ static void manage(Window w, XWindowAttributes *wa) {
     updatetitle(c);
     updatewindowtype(c);
     updatewmhints(c);
-    if (c->ispanel)
-        updatestruts(c);
     XSelectInput(dpy, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
     grabbuttons(c, 0);
     if (XGetTransientForHint(dpy, w, &trans) && trans != None)
@@ -1056,9 +1052,9 @@ static void togglefloating(const char *arg) {
         c->height = c->orig_height;
         if (c->width < 100 || c->height < 100) {
             c->width = (selmon->width - 2 * outer_gaps - 2 * BORDER_WIDTH) / 2;
-            c->height = (selmon->height - selmon->bh - selmon->bbh - 2 * outer_gaps - 2 * BORDER_WIDTH) / 2;
+            c->height = (selmon->height - 2 * outer_gaps - 2 * BORDER_WIDTH) / 2;
             c->x = selmon->x + (selmon->width - c->width - 2 * BORDER_WIDTH) / 2;
-            c->y = selmon->y + selmon->bh + (selmon->height - selmon->bh - selmon->bbh - c->height - 2 * BORDER_WIDTH) / 2;
+            c->y = selmon->y + (selmon->height - c->height - 2 * BORDER_WIDTH) / 2;
         }
     } else if (c->state == STATE_FLOATING) {
         c->state = STATE_NORMAL;
@@ -1069,9 +1065,9 @@ static void togglefloating(const char *arg) {
         c->orig_height = c->height;
         c->state = STATE_FLOATING;
         c->width = (selmon->width - 2 * outer_gaps - 2 * BORDER_WIDTH) / 2;
-        c->height = (selmon->height - selmon->bh - selmon->bbh - 2 * outer_gaps - 2 * BORDER_WIDTH) / 2;
+        c->height = (selmon->height - 2 * outer_gaps - 2 * BORDER_WIDTH) / 2;
         c->x = selmon->x + (selmon->width - c->width - 2 * BORDER_WIDTH) / 2;
-        c->y = selmon->y + selmon->bh + (selmon->height - selmon->bh - selmon->bbh - c->height - 2 * BORDER_WIDTH) / 2;
+        c->y = selmon->y + (selmon->height - c->height - 2 * BORDER_WIDTH) / 2;
     }
     restack(selmon);
 }
@@ -1175,7 +1171,6 @@ static void movemouse(const char *arg) {
 
     int orig_scroll_x = selmon->scroll_x;
     int dragging = 0;
-    int reorder = 0;
 
     do {
         XMaskEvent(dpy, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
@@ -1195,9 +1190,9 @@ static void movemouse(const char *arg) {
                 if (abs(selmon->x + outer_gaps - nx) < SNAP) nx = selmon->x + outer_gaps;
                 else if (abs((selmon->x + selmon->width - outer_gaps) - (nx + c->width + 2 * c->border_width)) < SNAP)
                     nx = selmon->x + selmon->width - outer_gaps - c->width - 2 * c->border_width;
-                if (abs(selmon->y + selmon->bh + outer_gaps - ny) < SNAP) ny = selmon->y + selmon->bh + outer_gaps;
-                else if (abs((selmon->y + selmon->height - selmon->bbh - outer_gaps) - (ny + c->height + 2 * c->border_width)) < SNAP)
-                    ny = selmon->y + selmon->height - selmon->bbh - outer_gaps - c->height - 2 * c->border_width;
+                if (abs(selmon->y + outer_gaps - ny) < SNAP) ny = selmon->y + outer_gaps;
+                else if (abs((selmon->y + selmon->height - outer_gaps) - (ny + c->height + 2 * c->border_width)) < SNAP)
+                    ny = selmon->y + selmon->height - outer_gaps - c->height - 2 * c->border_width;
                 resize(c, nx, ny, c->width, c->height, 1);
             } else {
                 int dx = ev.xmotion.x - x;
@@ -1207,20 +1202,26 @@ static void movemouse(const char *arg) {
                     dragging = 1;
 
                 if (dragging && abs(dy) > SNAP) {
-                    reorder = 1;
                     selmon->scroll_x = orig_scroll_x + dx;
 
                     int total = get_total_strip_width(selmon);
-                    int max_scroll = -(total - selmon->width);
-                    if (max_scroll > 0) max_scroll = 0;
-                    if (selmon->scroll_x > 0) selmon->scroll_x = 0;
-                    if (selmon->scroll_x < max_scroll) selmon->scroll_x = max_scroll;
+                    if (total < selmon->width) {
+                        selmon->scroll_x = (selmon->width - total) / 2;
+                    } else {
+                        int max_scroll = -(total - selmon->width);
+                        if (max_scroll > 0) max_scroll = 0;
+                        if (selmon->scroll_x > 0) selmon->scroll_x = 0;
+                        if (selmon->scroll_x < max_scroll) selmon->scroll_x = max_scroll;
+                    }
 
                     arrange(selmon);
                 } else if (dragging) {
-                    int col_w = (selmon->width - 2 * outer_gaps - inner_gaps - 4 * BORDER_WIDTH) / 2;
-                    if (col_w < 200) col_w = 200;
-                    int win_w = (c->state == STATE_MAXIMIZED) ? c->width + 2 * BORDER_WIDTH : col_w + 2 * BORDER_WIDTH;
+                    int usable = selmon->width - 2 * outer_gaps - 4 * BORDER_WIDTH;
+                    int col_w = (usable - inner_gaps) / 2;
+                    int actual_inner = usable - 2 * col_w;
+                    if (col_w < 200) { col_w = 200; actual_inner = inner_gaps; }
+
+                    int win_w = (c->state == STATE_MAXIMIZED) ? c->width + 2 * c->border_width : col_w + 2 * c->border_width;
                     int threshold = win_w / 4;
 
                     if (dx > threshold && c->next && ISVISIBLE(c->next)) {
@@ -1234,7 +1235,7 @@ static void movemouse(const char *arg) {
                             c->prev = t;
                             if (t->next) t->next->prev = c;
                             t->next = c;
-                            x += win_w + inner_gaps;
+                            x += win_w + actual_inner;
                             ocx = c->x;
                             arrange(selmon);
                         }
@@ -1250,7 +1251,7 @@ static void movemouse(const char *arg) {
                             if (t->prev) t->prev->next = c;
                             t->prev = c;
                             if (!c->prev) selmon->clients = c;
-                            x -= win_w + inner_gaps;
+                            x -= win_w + actual_inner;
                             ocx = c->x;
                             arrange(selmon);
                         }
@@ -1264,7 +1265,7 @@ static void movemouse(const char *arg) {
 }
 
 static void resizemouse(const char *arg) {
-    int ocx, ocy, nw, nh;
+    int nw, nh;
     Client *c;
     XEvent ev;
     Time lasttime = 0;
@@ -1272,8 +1273,6 @@ static void resizemouse(const char *arg) {
     if (c->state == STATE_FULLSCREEN) return;
     
     restack(selmon);
-    ocx = c->x;
-    ocy = c->y;
     if (XGrabPointer(dpy, root, False, MOUSEMASK, GrabModeAsync, GrabModeAsync,
         None, cursor_resize, CurrentTime) != GrabSuccess) return;
     XWarpPointer(dpy, None, c->window, 0, 0, 0, 0, c->width + c->border_width - 1, c->height + c->border_width - 1);
@@ -1297,8 +1296,8 @@ static void resizemouse(const char *arg) {
             if (c->state == STATE_FLOATING) {
                 if (c->x + nw + 2 * c->border_width > selmon->x + selmon->width - outer_gaps)
                     nw = selmon->x + selmon->width - outer_gaps - c->x - 2 * c->border_width;
-                if (c->y + nh + 2 * c->border_width > selmon->y + selmon->height - selmon->bbh - outer_gaps)
-                    nh = selmon->y + selmon->height - selmon->bbh - outer_gaps - c->y - 2 * c->border_width;
+                if (c->y + nh + 2 * c->border_width > selmon->y + selmon->height - outer_gaps)
+                    nh = selmon->y + selmon->height - outer_gaps - c->y - 2 * c->border_width;
                 resize(c, c->x, c->y, nw, nh, 1);
             } else {
                 c->state = STATE_MAXIMIZED;
@@ -1306,10 +1305,14 @@ static void resizemouse(const char *arg) {
                 c->height = nh;
                 
                 int total = get_total_strip_width(selmon);
-                int max_scroll = -(total - selmon->width);
-                if (max_scroll > 0) max_scroll = 0;
-                if (selmon->scroll_x > 0) selmon->scroll_x = 0;
-                if (selmon->scroll_x < max_scroll) selmon->scroll_x = max_scroll;
+                if (total < selmon->width) {
+                    selmon->scroll_x = (selmon->width - total) / 2;
+                } else {
+                    int max_scroll = -(total - selmon->width);
+                    if (max_scroll > 0) max_scroll = 0;
+                    if (selmon->scroll_x > 0) selmon->scroll_x = 0;
+                    if (selmon->scroll_x < max_scroll) selmon->scroll_x = max_scroll;
+                }
                 
                 arrange(selmon);
             }
@@ -1320,7 +1323,6 @@ static void resizemouse(const char *arg) {
     XUngrabPointer(dpy, CurrentTime);
     while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
-
 
 static void spawn(const char *arg) {
     if (fork() == 0) {
@@ -1405,18 +1407,14 @@ static void configurerequest(XEvent *e) {
     if (c) {
         if (ev->value_mask & CWBorderWidth)
             c->border_width = ev->border_width > 0 ? ev->border_width : 0;
-        if (c->state == STATE_NORMAL || c->state == STATE_FULLSCREEN) {
+        if (c->state == STATE_FLOATING) {
             if (ev->value_mask & CWX) c->x = ev->x;
             if (ev->value_mask & CWY) c->y = ev->y;
             if (ev->value_mask & CWWidth) c->width = ev->width > 0 ? ev->width : 1;
             if (ev->value_mask & CWHeight) c->height = ev->height > 0 ? ev->height : 1;
-            if ((c->state == STATE_NORMAL || c->state == STATE_FULLSCREEN) && (ev->value_mask & (CWX|CWY)) && !(ev->value_mask & (CWWidth|CWHeight)))
-                configure(c);
             if (ISVISIBLE(c)) XMoveResizeWindow(dpy, c->window, c->x, c->y, c->width, c->height);
         } else {
-            wc.x = ev->x; wc.y = ev->y; wc.width = ev->width; wc.height = ev->height;
-            wc.border_width = ev->border_width; wc.sibling = ev->above; wc.stack_mode = ev->detail;
-            XConfigureWindow(dpy, ev->window, ev->value_mask, &wc);
+            configure(c);
         }
     } else {
         wc.x = ev->x; wc.y = ev->y; wc.width = ev->width; wc.height = ev->height;
@@ -1490,12 +1488,6 @@ static void propertynotify(XEvent *e) {
         }
         if (ev->atom == netatom[NetWMWindowType])
             updatewindowtype(c);
-        if (ev->atom == netatom[NetWMStrutPartial] || ev->atom == netatom[NetWMStrut]) {
-            if (c->ispanel && c->monitor) {
-                updatestruts(c);
-                arrange(c->monitor);
-            }
-        }
     }
 }
 
@@ -1702,4 +1694,3 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
-
