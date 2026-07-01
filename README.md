@@ -31,8 +31,9 @@ cc -o mriya mriya.c -D_POSIX_C_SOURCE=200809L $(pkg-config --cflags --libs x11) 
 
 # deps
 
-- libX11-dev
-- libxkbfile-dev
+- libX11-devel
+- libxkbfile-devel
+- libxkbcommon-devel
 - alsamixer
 - brightnessctl
 
