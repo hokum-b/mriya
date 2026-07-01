@@ -127,6 +127,7 @@ enum {
     NetWMState, NetWMStateFullScreen,
     NetWMStrutPartial, NetWMStrut,
     NetActiveWindow,
+    NetNumberOfDesktops, NetDesktopNames, NetCurrentDesktop, NetWMDesktop,
     NetLast
 };
 static Atom netatom[NetLast];
@@ -205,6 +206,8 @@ static void updatestatus(void);
 static void updatetitle(Client *c);
 static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
+static void updateworkspaces(void);
+static int workspace_has_clients(int ws);
 static void view(const char *arg);
 static Client *wintoclient(Window w);
 static Monitor *wintomon(Window w);
@@ -619,6 +622,10 @@ static void arrange(Monitor *m) {
     }
 
     for (c = m->clients; c; c = c->next) {
+        if (c->ispanel) {
+            XRaiseWindow(dpy, c->window);
+            continue;
+        }
         if (!ISVISIBLE(c)) {
             XMoveWindow(dpy, c->window, c->width * -2, c->y);
             continue;
@@ -675,6 +682,9 @@ static void restack(Monitor *m) {
         arrange(m);
         return;
     }
+    for (c = m->stack; c; c = c->next_stack)
+        if (c->ispanel)
+            XRaiseWindow(dpy, c->window);
     for (c = m->stack; c; c = c->next_stack)
         if (c->state == STATE_FLOATING && ISVISIBLE(c) && c != m->sel)
             XRaiseWindow(dpy, c->window);
@@ -764,6 +774,7 @@ static void ws_up(const char *arg) {
             focus(NULL);
         }
         restack(selmon);
+        updateworkspaces();
     }
 }
 
@@ -780,6 +791,7 @@ static void ws_down(const char *arg) {
             focus(NULL);
         }
         restack(selmon);
+        updateworkspaces();
     }
 }
 
@@ -954,6 +966,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     }
     restack(selmon);
     XMapWindow(dpy, c->window);
+    updateworkspaces();
 }
 
 static void unmanage(Client *c, int destroyed) {
@@ -998,6 +1011,7 @@ static void unmanage(Client *c, int destroyed) {
     focus(nextfocus);
     updateclientlist();
     restack(m);
+    updateworkspaces();
 }
 
 static void killclient(const char *arg) {
@@ -1118,6 +1132,7 @@ static void tag(const char *arg) {
         selmon->sel->workspace = tag;
     focus(NULL);
     restack(selmon);
+    updateworkspaces();
 }
 
 static void toggletag(const char *arg) {
@@ -1130,6 +1145,7 @@ static void toggletag(const char *arg) {
     }
     focus(NULL);
     restack(selmon);
+    updateworkspaces();
 }
 
 static void view(const char *arg) {
@@ -1150,6 +1166,7 @@ static void view(const char *arg) {
         focus(NULL);
     }
     restack(selmon);
+    updateworkspaces();
 }
 
 static void toggleview(const char *arg) {
@@ -1161,6 +1178,7 @@ static void toggleview(const char *arg) {
     }
     focus(NULL);
     restack(selmon);
+    updateworkspaces();
 }
 
 static void tagmon(const char *arg) {
@@ -1182,6 +1200,7 @@ static void sendmon(Client *c, Monitor *m) {
     attachstack(c);
     focus(NULL);
     restack(m);
+    updateworkspaces();
 }
 
 static void movemouse(const char *arg) {
@@ -1576,6 +1595,10 @@ static void initatoms(void) {
     netatom[NetWMStrutPartial] = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
     netatom[NetWMStrut] = XInternAtom(dpy, "_NET_WM_STRUT", False);
     netatom[NetActiveWindow] = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
+    netatom[NetNumberOfDesktops] = XInternAtom(dpy, "_NET_NUMBER_OF_DESKTOPS", False);
+    netatom[NetDesktopNames] = XInternAtom(dpy, "_NET_DESKTOP_NAMES", False);
+    netatom[NetCurrentDesktop] = XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False);
+    netatom[NetWMDesktop] = XInternAtom(dpy, "_NET_WM_DESKTOP", False);
     net_supporting_wm_check = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
 }
 
@@ -1628,6 +1651,56 @@ static void updateclientlist(void) {
 static void updatestatus(void) {
 }
 
+static int workspace_has_clients(int ws) {
+    Monitor *m;
+    Client *c;
+    for (m = mons; m; m = m->next)
+        for (c = m->clients; c; c = c->next)
+            if (c->workspace == ws) return 1;
+    return 0;
+}
+
+static void updateworkspaces(void) {
+    int i, pos = 0, count = 0;
+    char names[256] = "";
+    int ws_map[MAX_WORKSPACES];
+    Monitor *m;
+    Client *c;
+
+    for (i = 0; i < MAX_WORKSPACES; i++) {
+        if (workspace_has_clients(i) || i == selmon->workspace) {
+            ws_map[count] = i;
+            names[pos++] = '0' + i;
+            names[pos++] = '\0';
+            count++;
+        }
+    }
+
+    XChangeProperty(dpy, root, netatom[NetNumberOfDesktops], XA_CARDINAL, 32,
+        PropModeReplace, (unsigned char *)&count, 1);
+    XChangeProperty(dpy, root, netatom[NetDesktopNames], XInternAtom(dpy, "UTF8_STRING", False), 8,
+        PropModeReplace, (unsigned char *)names, pos);
+
+    for (i = 0; i < count; i++) {
+        if (ws_map[i] == selmon->workspace) {
+            long cd = i;
+            XChangeProperty(dpy, root, netatom[NetCurrentDesktop], XA_CARDINAL, 32,
+                PropModeReplace, (unsigned char *)&cd, 1);
+            break;
+        }
+    }
+
+    for (i = 0; i < count; i++) {
+        for (m = mons; m; m = m->next)
+            for (c = m->clients; c; c = c->next)
+                if (c->workspace == ws_map[i]) {
+                    long desktop = i;
+                    XChangeProperty(dpy, c->window, netatom[NetWMDesktop], XA_CARDINAL, 32,
+                        PropModeReplace, (unsigned char *)&desktop, 1);
+                }
+    }
+}
+
 static void setup(void) {
     XSetWindowAttributes wa;
     sigchld(0);
@@ -1666,6 +1739,7 @@ static void setup(void) {
         netatom[NetWMState], netatom[NetWMStateFullScreen],
         netatom[NetWMStrutPartial], netatom[NetWMStrut],
         netatom[NetActiveWindow],
+        netatom[NetNumberOfDesktops], netatom[NetDesktopNames], netatom[NetCurrentDesktop], netatom[NetWMDesktop],
     };
     XChangeProperty(dpy, root, XInternAtom(dpy, "_NET_SUPPORTED", False), XA_ATOM, 32,
         PropModeReplace, (unsigned char *)supported, LENGTH(supported));
@@ -1680,6 +1754,7 @@ static void setup(void) {
     XDeleteProperty(dpy, root, XInternAtom(dpy, "_NET_CLIENT_LIST_STACKING", False));
     scan();
     autostart();
+    updateworkspaces();
 }
 
 static void run(void) {
@@ -1734,3 +1809,4 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
