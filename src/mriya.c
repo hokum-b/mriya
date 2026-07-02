@@ -180,6 +180,7 @@ static void restack(Monitor *m);
 static void restartwm(const char *arg);
 static void run(void);
 static void scan(void);
+static int ignorewindow(Window w);
 static int sendevent(Client *c, Atom proto);
 static void sendmon(Client *c, Monitor *m);
 static void setclientstate(Client *c, long state);
@@ -1617,6 +1618,20 @@ static void initcolors(void) {
     col_urgent = color.pixel;
 }
 
+static int ignorewindow(Window w) {
+    XClassHint ch = { NULL, NULL };
+    int ignore = 0;
+    if (XGetClassHint(dpy, w, &ch)) {
+        if (ch.res_name && strstr(ch.res_name, "sddm"))
+            ignore = 1;
+        else if (ch.res_class && strstr(ch.res_class, "sddm"))
+            ignore = 1;
+        if (ch.res_name) XFree(ch.res_name);
+        if (ch.res_class) XFree(ch.res_class);
+    }
+    return ignore;
+}
+
 static void scan(void) {
     unsigned int i, num;
     Window d1, d2, *wins = NULL;
@@ -1625,11 +1640,13 @@ static void scan(void) {
         for (i = 0; i < num; i++) {
             if (!XGetWindowAttributes(dpy, wins[i], &wa) || wa.override_redirect
                 || XGetTransientForHint(dpy, wins[i], &d1)) continue;
+            if (ignorewindow(wins[i])) continue;
             if (wa.map_state == IsViewable || getstate(wins[i]) == IconicState)
                 manage(wins[i], &wa);
         }
         for (i = 0; i < num; i++) {
             if (!XGetWindowAttributes(dpy, wins[i], &wa)) continue;
+            if (ignorewindow(wins[i])) continue;
             if (XGetTransientForHint(dpy, wins[i], &d1)
                 && (wa.map_state == IsViewable || getstate(wins[i]) == IconicState))
                 manage(wins[i], &wa);
@@ -1809,4 +1826,3 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
-
