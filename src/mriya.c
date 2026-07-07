@@ -41,6 +41,7 @@ typedef struct Client {
     struct Client *prev_stack;
     int border_width;
     int orig_border_width;
+    int basew, baseh;
 } Client;
 
 typedef struct Monitor {
@@ -401,13 +402,13 @@ static void updatesizehints(Client *c) {
     if (!XGetWMNormalHints(dpy, c->window, &size, &msize))
         size.flags = PSize;
     if (size.flags & PBaseSize) {
-        c->orig_width = size.base_width;
-        c->orig_height = size.base_height;
+        c->basew = size.base_width;
+        c->baseh = size.base_height;
     } else if (size.flags & PMinSize) {
-        c->orig_width = size.min_width;
-        c->orig_height = size.min_height;
+        c->basew = size.min_width;
+        c->baseh = size.min_height;
     } else
-        c->orig_width = c->orig_height = 0;
+        c->basew = c->baseh = 0;
 }
 
 static void updatetitle(Client *c) {
@@ -698,7 +699,6 @@ static void restack(Monitor *m) {
 
 static void resize(Client *c, int x, int y, int w, int h, int interact) {
     XWindowChanges wc;
-    if (c->state == STATE_FULLSCREEN) return;
     if (w < 1) w = 1;
     if (h < 1) h = 1;
     c->x = wc.x = x;
@@ -1033,8 +1033,6 @@ static void killclient(const char *arg) {
 static void setfullscreen(Client *c, int fullscreen) {
     if (fullscreen && c->state != STATE_FULLSCREEN) {
         c->prev_state = c->state;
-        XChangeProperty(dpy, c->window, wmatom[WMState], XA_ATOM, 32,
-            PropModeReplace, (unsigned char *)&wmatom[WMState], 1);
         c->state = STATE_FULLSCREEN;
         c->orig_x = c->x;
         c->orig_y = c->y;
@@ -1044,9 +1042,10 @@ static void setfullscreen(Client *c, int fullscreen) {
         c->border_width = 0;
         resize(c, c->monitor->x, c->monitor->y, c->monitor->width, c->monitor->height, 0);
         XRaiseWindow(dpy, c->window);
+        Atom fsatom[1] = { netatom[NetWMStateFullScreen] };
+        XChangeProperty(dpy, c->window, netatom[NetWMState], XA_ATOM, 32,
+            PropModeReplace, (unsigned char *)fsatom, 1);
     } else if (!fullscreen && c->state == STATE_FULLSCREEN) {
-        XChangeProperty(dpy, c->window, wmatom[WMState], XA_ATOM, 32,
-            PropModeReplace, (unsigned char *)0, 0);
         c->state = c->prev_state;
         c->x = c->orig_x;
         c->y = c->orig_y;
@@ -1054,12 +1053,15 @@ static void setfullscreen(Client *c, int fullscreen) {
         c->height = c->orig_height;
         c->border_width = c->orig_border_width;
         resize(c, c->x, c->y, c->width, c->height, 0);
+        XChangeProperty(dpy, c->window, netatom[NetWMState], XA_ATOM, 32,
+            PropModeReplace, (unsigned char *)NULL, 0);
     }
 }
 
 static void togglefullscreen(const char *arg) {
-    if (selmon->sel)
-        setfullscreen(selmon->sel, selmon->sel->state != STATE_FULLSCREEN);
+    if (!selmon->sel) return;
+    setfullscreen(selmon->sel, selmon->sel->state != STATE_FULLSCREEN);
+    restack(selmon);
 }
 
 static void togglemaximize(const char *arg) {
@@ -1449,8 +1451,10 @@ static void clientmessage(XEvent *e) {
             if (action == 0)               target_fs = 0;
             else if (action == 1)          target_fs = 1;
             else if (action == 2)          target_fs = (c->state != STATE_FULLSCREEN);
-            if (target_fs != -1)
+            if (target_fs != -1) {
                 setfullscreen(c, target_fs);
+                restack(selmon);
+            }
         }
     }
 }
