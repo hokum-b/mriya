@@ -29,6 +29,7 @@ typedef struct Client {
     int orig_x, orig_y;
     unsigned int orig_width, orig_height;
     ClientState state;
+    ClientState prev_state;
     int workspace;
     struct Monitor *monitor;
     int mapped;
@@ -500,7 +501,6 @@ static int sendevent(Client *c, Atom proto) {
 }
 
 static void setfocus(Client *c) {
-    if (c->state == STATE_FULLSCREEN) return;
     XSetInputFocus(dpy, c->window, RevertToPointerRoot, CurrentTime);
     XChangeProperty(dpy, root, XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False),
         XA_WINDOW, 32, PropModeReplace, (unsigned char *)&(c->window), 1);
@@ -938,6 +938,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     c->width = c->orig_width = wa->width;
     c->height = c->orig_height = wa->height;
     c->state = STATE_NORMAL;
+    c->prev_state = STATE_NORMAL;
     c->workspace = selmon->workspace;
     c->monitor = selmon;
     c->mapped = 1;
@@ -945,6 +946,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     updatesizehints(c);
     updatetitle(c);
     updatewindowtype(c);
+    c->prev_state = c->state;
     updatewmhints(c);
     XSelectInput(dpy, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
     grabbuttons(c, 0);
@@ -1030,6 +1032,7 @@ static void killclient(const char *arg) {
 
 static void setfullscreen(Client *c, int fullscreen) {
     if (fullscreen && c->state != STATE_FULLSCREEN) {
+        c->prev_state = c->state;
         XChangeProperty(dpy, c->window, wmatom[WMState], XA_ATOM, 32,
             PropModeReplace, (unsigned char *)&wmatom[WMState], 1);
         c->state = STATE_FULLSCREEN;
@@ -1044,7 +1047,7 @@ static void setfullscreen(Client *c, int fullscreen) {
     } else if (!fullscreen && c->state == STATE_FULLSCREEN) {
         XChangeProperty(dpy, c->window, wmatom[WMState], XA_ATOM, 32,
             PropModeReplace, (unsigned char *)0, 0);
-        c->state = STATE_NORMAL;
+        c->state = c->prev_state;
         c->x = c->orig_x;
         c->y = c->orig_y;
         c->width = c->orig_width;
@@ -1436,6 +1439,19 @@ static void clientmessage(XEvent *e) {
         killclient(NULL);
     else if (cme->message_type == XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False)) {
         if (c != selmon->sel) focus(c);
+    }
+    else if (cme->message_type == netatom[NetWMState]) {
+        unsigned long action = cme->data.l[0];
+        Atom prop1 = cme->data.l[1];
+        Atom prop2 = cme->data.l[2];
+        int target_fs = -1;
+        if (prop1 == netatom[NetWMStateFullScreen] || prop2 == netatom[NetWMStateFullScreen]) {
+            if (action == 0)               target_fs = 0;
+            else if (action == 1)          target_fs = 1;
+            else if (action == 2)          target_fs = (c->state != STATE_FULLSCREEN);
+            if (target_fs != -1)
+                setfullscreen(c, target_fs);
+        }
     }
 }
 
