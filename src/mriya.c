@@ -455,7 +455,6 @@ static void updatewindowtype(Client *c) {
         c->ispanel = 1;
     } else if (wtype == netatom[NetWMWindowTypeDialog]) {
         c->state = STATE_FLOATING;
-        c->border_width = 0;
     }
     Atom state = getatomprop(c, netatom[NetWMState]);
     if (state == netatom[NetWMStateFullScreen])
@@ -551,8 +550,12 @@ static void focus(Client *c) {
         selmon->sel = c;
         selmon->lastsel[selmon->workspace] = c;
         setfocus(c);
+        if (!c->frame) XSetWindowBorder(dpy, c->window, col_sel_border);
         drawtitle(c);
-        if (old && old != c) drawtitle(old);
+        if (old && old != c) {
+            if (!old->frame) XSetWindowBorder(dpy, old->window, col_norm_border);
+            drawtitle(old);
+        }
         drawbar(selmon);
     } else {
         selmon->sel = NULL;
@@ -564,11 +567,12 @@ static void focus(Client *c) {
 static void unfocus(Client *c, int setfocus) {
     if (!c) return;
     grabbuttons(c, 0);
+    if (!c->frame) XSetWindowBorder(dpy, c->window, col_norm_border);
+    drawtitle(c);
     if (setfocus) {
         XSetInputFocus(dpy, root, RevertToPointerRoot, CurrentTime);
         XDeleteProperty(dpy, root, XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False));
     }
-    drawtitle(c);
 }
 
 static void grabbuttons(Client *c, int focused) {
@@ -758,7 +762,7 @@ static void resize(Client *c, int x, int y, int w, int h, int interact) {
         wc.y = y;
         wc.width = w;
         wc.height = h;
-        wc.border_width = 0;
+        wc.border_width = c->border_width;
         XConfigureWindow(dpy, c->window, CWX|CWY|CWWidth|CWHeight|CWBorderWidth, &wc);
     }
     configure(c);
@@ -775,7 +779,7 @@ static void configure(Client *c) {
     ce.y = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
     ce.width = c->width;
     ce.height = c->height;
-    ce.border_width = 0;
+    ce.border_width = c->border_width;
     ce.above = None;
     ce.override_redirect = False;
     XSendEvent(dpy, c->window, False, StructureNotifyMask, (XEvent *)&ce);
@@ -999,7 +1003,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     c->workspace = selmon->workspace;
     c->monitor = selmon;
     c->mapped = 1;
-    c->border_width = 0;
+    c->border_width = BORDER_WIDTH;
     updatesizehints(c);
     updatetitle(c);
     updatewindowtype(c);
@@ -1014,6 +1018,7 @@ static void manage(Window w, XWindowAttributes *wa) {
 
     if (c->ispanel || is_transient || !SHOW_TITLEBAR) {
         c->frame = None;
+        XSetWindowBorder(dpy, w, c->border_width > 0 ? c->border_width : 0);
     } else {
         XSetWindowAttributes frame_attr;
         frame_attr.override_redirect = True;
@@ -1026,6 +1031,7 @@ static void manage(Window w, XWindowAttributes *wa) {
         XReparentWindow(dpy, w, c->frame, 0, TITLE_HEIGHT);
         wc.border_width = 0;
         XConfigureWindow(dpy, w, CWBorderWidth, &wc);
+        c->border_width = 0;  /* border drawn on frame instead */
     }
 
     attach(c);
@@ -1088,7 +1094,7 @@ static void unmanage(Client *c, int destroyed) {
             XDestroyWindow(dpy, c->frame);
         } else {
             XWindowChanges wc;
-            wc.border_width = 0;
+            wc.border_width = c->border_width;
             XConfigureWindow(dpy, c->window, CWBorderWidth, &wc);
         }
         XUngrabButton(dpy, AnyButton, AnyModifier, c->window);
@@ -1141,7 +1147,7 @@ static void setfullscreen(Client *c, int fullscreen) {
         c->y = c->orig_y;
         c->width = c->orig_width;
         c->height = c->orig_height;
-        c->border_width = 0;
+        c->border_width = c->orig_border_width;
         resize(c, c->x, c->y, c->width, c->height, 0);
         XChangeProperty(dpy, c->window, netatom[NetWMState], XA_ATOM, 32,
             PropModeReplace, (unsigned char *)NULL, 0);
@@ -1509,6 +1515,16 @@ static void drawtitle(Client *c) {
     XDrawRectangle(dpy, c->frame, gc, bx, by, BUTTON_SIZE, BUTTON_SIZE);
     XDrawRectangle(dpy, c->frame, gc, bx+2, by+2, BUTTON_SIZE-5, BUTTON_SIZE-5);
     #endif
+
+    /* draw border around the frame window */
+    if (BORDER_WIDTH > 0) {
+        XSetForeground(dpy, gc, (c == selmon->sel) ? col_sel_border : col_norm_border);
+        int frame_h = c->height + th;
+        int i;
+        for (i = 0; i < BORDER_WIDTH; i++) {
+            XDrawRectangle(dpy, c->frame, gc, i, i, fw - 2*i - 1, frame_h - 2*i - 1);
+        }
+    }
 }
 
 static void buttonpress(XEvent *e) {
@@ -1620,6 +1636,8 @@ static void configurerequest(XEvent *e) {
     XWindowChanges wc;
     Client *c = wintoclient(ev->window);
     if (c) {
+        if (ev->value_mask & CWBorderWidth && !c->frame)
+            c->border_width = ev->border_width > 0 ? ev->border_width : 0;
         if (c->state == STATE_FLOATING) {
             if (ev->value_mask & CWX) c->x = ev->x;
             if (ev->value_mask & CWY) c->y = ev->y;
@@ -1631,7 +1649,7 @@ static void configurerequest(XEvent *e) {
         }
     } else {
         wc.x = ev->x; wc.y = ev->y; wc.width = ev->width; wc.height = ev->height;
-        wc.border_width = 0;
+        wc.border_width = ev->border_width;
         wc.sibling = ev->above; wc.stack_mode = ev->detail;
         XConfigureWindow(dpy, ev->window, ev->value_mask, &wc);
     }
