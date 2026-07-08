@@ -1,21 +1,26 @@
-// comments soon (tm)
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define BORDER_WIDTH 2
+#define BORDER_WIDTH 0
 
 #define INNER_GAP 15
-
 #define OUTER_GAP 50
-
 #define SNAP 32
 
 #define NORM_BG "#222222"
-#define NORM_BORDER "##ede5d4"
-#define SEL_BG "#005577"
+#define NORM_BORDER "#ede5d4"
+#define SEL_BG "#111111"
 #define SEL_BORDER "#ede5d4"
 #define URGENT_COLOR "#ede5d4"
+
+#define TITLE_ACTIVE_BG   SEL_BG
+#define TITLE_ACTIVE_FG   "#ffffff"
+#define TITLE_INACTIVE_BG NORM_BG
+#define TITLE_INACTIVE_FG NORM_BORDER
+
+#define SHOW_TITLEBAR 1
+#define SHOW_TITLE   1
+#define SHOW_BUTTONS 0
 
 #define MODKEY Mod4Mask
 
@@ -73,4 +78,3 @@ static const Layout layouts[] = {
 #define STRIP_ALIGN 0
 
 #endif
-
