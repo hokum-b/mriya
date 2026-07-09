@@ -1285,6 +1285,12 @@ static void movemouse(const char *arg) {
     do {
         XMaskEvent(dpy, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
         switch (ev.type) {
+        case DestroyNotify:
+        case UnmapNotify:
+            if (ev.xdestroywindow.window == c->window || ev.xdestroywindow.window == c->frame)
+                goto done_move;
+            handler[ev.type](&ev);
+            break;
         case ConfigureRequest:
         case Expose:
         case MapRequest:
@@ -1371,6 +1377,7 @@ static void movemouse(const char *arg) {
             break;
         }
     } while (ev.type != ButtonRelease);
+done_move:
     XUngrabPointer(dpy, CurrentTime);
 }
 
@@ -1389,6 +1396,12 @@ static void resizemouse(const char *arg) {
     do {
         XMaskEvent(dpy, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
         switch (ev.type) {
+        case DestroyNotify:
+        case UnmapNotify:
+            if (ev.xdestroywindow.window == c->window || ev.xdestroywindow.window == c->frame)
+                goto done_resize;
+            handler[ev.type](&ev);
+            break;
         case ConfigureRequest:
         case Expose:
         case MapRequest:
@@ -1429,6 +1442,7 @@ static void resizemouse(const char *arg) {
             break;
         }
     } while (ev.type != ButtonRelease);
+done_resize:
     XWarpPointer(dpy, None, c->window, 0, 0, 0, 0, c->width - 1, c->height - 1);
     XUngrabPointer(dpy, CurrentTime);
     while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
