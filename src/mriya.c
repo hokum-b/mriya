@@ -1062,9 +1062,9 @@ static void unmanage(Client *c, int destroyed) {
         }
         XUngrabButton(dpy, AnyButton, AnyModifier, c->window);
         setclientstate(c, WithdrawnState);
-        XSync(dpy, False);
         XSetErrorHandler(xerror);
         XUngrabServer(dpy);
+        XFlush(dpy);
     } else {
         if (c->frame) XDestroyWindow(dpy, c->frame);
     }
@@ -2002,4 +2002,3 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
-
