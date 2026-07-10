@@ -1,46 +1,60 @@
 # mriya
-a scrolling x11 window manager.
+is a scrolling x11 window manager.
 
 <p align="center">
   <img src="assets/img.png" alt="img" width="700">
 </p>
 
-- if u make a cool rice and create a pull request with (like replacing the current image) it ill prob merge it
+## to go more in-depth
 
-# what is it?
+scrolling means that windows are arranged on a ribbon-style horizontal strip that the user can scroll through.
 
-mriya is a scrolling x11 window-manager inspired by niri, i3wm and plan9's rio. 
+mriya is heavily inspired by [niri](https://github.com/niri-wm/niri) and [i3](https://i3wm.org/)
 
-# why use this?
+## mriya has been tested on
 
-- simple codebase
-- you can actually reliably take screenshots, unlike wayland compositors.
-- its actually smaller than dwm!?
+- generic [linux](https://www.linux.org) x86_64
+- [freebsd](https://www.freebsd.org/) 15.1 x86_64
+- [netbsd](https://www.netbsd.org/) 10.1 x86_64
+- [openindiana](https://www.indiana.org) hipster 2026.04 x86_64
 
-# fun fact
-
-- mriya was named after the an225 mriya, the largest aircraft ever that was destroyed during the russo-ukranian war.
-
-- mriya means dream in ukranian.
-
-# compile
-
-```bash
-git clone https://github.com/hokum-b/mriya
-cd mriya/
-chmod +x install.sh
-./install.sh
-```
-- if you face any issues with running after compiling, reboot!!!
-
-
-# deps
+## deps
 
 - libX11-devel
 - libxkbfile-devel
 - libxkbcommon-devel
 - alsamixer
 - brightnessctl
+
+## compile
+
+```bash
+git clone https://github.com/hokum-b/mriya
+cd mriya/
+make
+```
+
+### run 
+
+```startx ./mriya```
+
+or move ```mriya``` to ```/usr/local/bin``` and run ```startx mriya```
+
+(some distro's dont have ```/usr/local/bin``` in their ```$PATH``` by default, run echo $PATH to make sure.)
+
+### set-up with display managers
+
+- create a ```/usr/share/xsessions/mriya.desktop```
+- paste
+
+```desktop
+[Desktop Entry]
+Name=mriya
+Comment=scrolling x11 window manager
+Exec=mriya
+Type=Application
+DesktopNames=mriya
+```
 
 
 # keybinds
