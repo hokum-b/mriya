@@ -16,7 +16,7 @@ mriya is heavily inspired by [niri](https://github.com/niri-wm/niri) and [i3](ht
 - generic [linux](https://www.linux.org) x86_64
 - [freebsd](https://www.freebsd.org/) 15.1 x86_64
 - [netbsd](https://www.netbsd.org/) 10.1 x86_64
-- [openindiana](https://www.indiana.org) hipster 2026.04 x86_64
+- [openindiana](https://www.openindiana.org) hipster 2026.04 x86_64
 
 ## compile
 
