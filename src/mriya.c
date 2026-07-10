@@ -750,13 +750,17 @@ static void showhide(Client *c) {
         if (c->frame) {
             XMoveWindow(dpy, c->frame, c->x, c->y);
             XMapWindow(dpy, c->frame);
+        } else {
+            XMoveWindow(dpy, c->window, c->x, c->y);
         }
-        XMoveWindow(dpy, c->window, c->x, c->y);
         showhide(c->next);
     } else {
         showhide(c->next);
-        if (c->frame) XMoveWindow(dpy, c->frame, c->width * -2, c->y);
-        XMoveWindow(dpy, c->window, c->width * -2, c->y);
+        if (c->frame) {
+            XMoveWindow(dpy, c->frame, c->width * -2, c->y);
+        } else {
+            XMoveWindow(dpy, c->window, c->width * -1, c->y);
+        }
     }
 }
 
@@ -1049,7 +1053,7 @@ static void unmanage(Client *c, int destroyed) {
         XSetErrorHandler(xerrordummy);
         XSelectInput(dpy, c->window, NoEventMask);
         if (c->frame) {
-            XReparentWindow(dpy, c->window, root, 0, 0);
+            XReparentWindow(dpy, c->window, root, c->x, c->y + TITLE_HEIGHT);
             XDestroyWindow(dpy, c->frame);
         } else {
             XWindowChanges wc;
@@ -1058,9 +1062,9 @@ static void unmanage(Client *c, int destroyed) {
         }
         XUngrabButton(dpy, AnyButton, AnyModifier, c->window);
         setclientstate(c, WithdrawnState);
+        XSync(dpy, False);
         XSetErrorHandler(xerror);
         XUngrabServer(dpy);
-        XFlush(dpy);
     } else {
         if (c->frame) XDestroyWindow(dpy, c->frame);
     }
@@ -1076,11 +1080,10 @@ static void killclient(const char *arg) {
     if (!sendevent(selmon->sel, wmatom[WMDelete])) {
         XGrabServer(dpy);
         XSetErrorHandler(xerrordummy);
-        XSetCloseDownMode(dpy, DestroyAll);
         XKillClient(dpy, selmon->sel->window);
+        XSync(dpy, False);
         XSetErrorHandler(xerror);
         XUngrabServer(dpy);
-        XFlush(dpy);
     }
 }
 
@@ -1897,6 +1900,7 @@ static void setup(void) {
         |EnterWindowMask|LeaveWindowMask|StructureNotifyMask|PropertyChangeMask;
     XChangeWindowAttributes(dpy, root, CWEventMask|CWCursor, &wa);
     XSelectInput(dpy, root, wa.event_mask);
+    updatenumlockmask();
     grabkeys();
     {
         unsigned int i, j;
@@ -1993,8 +1997,9 @@ int main(int argc, char *argv[]) {
     run();
     cleanup();
     if (restart) {
-        execlp(argv[0], argv[0], NULL);
+        execvp(argv[0], argv);
         die("mriya: failed to restart");
     }
     return 0;
 }
+
