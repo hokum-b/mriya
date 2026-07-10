@@ -2,7 +2,7 @@
 a scrolling x11 window manager.
 
 <p align="center">
-  <img src="img.png" alt="img" width="700">
+  <img src="assets/img.png" alt="img" width="700">
 </p>
 
 - if u make a cool rice and create a pull request with (like replacing the current image) it ill prob merge it
