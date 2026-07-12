@@ -6,7 +6,7 @@ is a scrolling x11 window manager.
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20bsd%20%7C%20openindiana-lightgrey.svg)
 
 <p align="center">
-  <img src="assets/img.png" alt="img" width="700">
+  <img src="/assets/img.png" alt="img" width="700">
 </p>
 
 ## to go more in-depth
