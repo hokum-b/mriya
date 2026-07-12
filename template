@@ -1,0 +1,29 @@
+pkgname=mriya
+version=0.1.0
+revision=1
+build_style=gnu-makefile
+hostmakedepends=""
+makedepends="libX11-devel libxkbfile-devel libxkbcommon-devel"
+depends="libX11 libxkbcommon libxkbcommon-x11 alsa-utils brightnessctl"
+short_desc="a scrolling x11 window manager"
+maintainer="unixextremist"
+license="ISC"
+homepage="https://github.com/hokum-b/mriya"
+distfiles="https://github.com/hokum-b/mriya/archive/refs/heads/master.tar.gz"
+checksum=skip
+
+do_install() {
+	vmkdir usr/bin
+	vcopy mriya usr/bin
+
+	vmkdir usr/share/xsessions
+	cat > "${DESTDIR}/usr/share/xsessions/mriya.desktop" <<EOF
+[Desktop Entry]
+Name=mriya
+Comment=a scrolling x11 window manager
+Exec=/usr/bin/mriya
+Type=Application
+EOF
+
+	vlicense docs/LICENSE
+}
