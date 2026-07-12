@@ -1,3 +1,4 @@
 *.c linguist-language=C
 *.h linguist-language=C
 *.md linguist-language=Markdown
+*.html linguist-language=HTML
