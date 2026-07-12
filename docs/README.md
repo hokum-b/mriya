@@ -99,6 +99,10 @@ edit `config.h`:
 #define FILEMANAGER "pcmanfm"
 ```
 
+# documentation
+
+please refer to [the website](https://hokum-b.github.io/mriya/) or the [.MD files](blank.md)
+
 # license
 
 mriya is licensed under the [ISC license](LICENSE)
