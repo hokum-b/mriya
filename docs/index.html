@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mriya!</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #111111;
+      color: #ffffff;
+      font-family: "Fira Code", monospace;
+      min-height: 100vh;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      padding: 3rem;
+      text-align: center;
+      gap: 2rem;
+    }
+
+    .hero img {
+      width: 100%;
+      max-width: 700px;
+      height: auto;
+      display: block;
+    }
+
+    hr {
+      width: 100%;
+      max-width: 700px;
+      border: none;
+      border-top: 1px solid #333333;
+    }
+
+    .content {
+      max-width: 700px;
+      line-height: 1.8;
+      text-align: left;
+    }
+
+    .about-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #ffffff;
+    }
+
+    footer {
+      display: flex;
+      gap: 2rem;
+    }
+
+    footer a {
+      color: #ffffff;
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+
+    footer a:hover {
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hero">
+    <img src="/assets/img.png" alt="Rice">
+  </div>
+
+  <hr>
+
+  <section class="content">
+    <div class="about-title">about</div>
+
+    <p>
+	mriya is a dead simple scrolling x11 window manager written in c, inspired by i3 and niri. it is experimental and not so-stable as of now. 
+	mriya has been tested on multiple operating systems such as: generic linux, freebsd, netbsd and openindiana. 
+    </p>
+  </section>
+
+  <hr>
+
+  <footer>
+    <a href="https://github.com/hokum-b/mriya" target="_blank" rel="noopener noreferrer">repository</a>
+    <a href="https://example.com" target="_blank" rel="noopener noreferrer">wiki</a>
+  </footer>
+
+</body>
+</html>
