@@ -30,21 +30,31 @@ cd mriya/
 make
 ```
 
+(the binary is produced at `./mriya`.)
+
 ### deps
 
-- libX11-devel
+- libX11-devel (xlib)
 - libxkbfile-devel
 - libxkbcommon-devel
-- alsamixer
-- brightnessctl
+- alsamixer (optional, for volume keys)
+- brightnessctl (optional, for brightness keys)
+
+### install
+
+```bash
+sudo make install
+```
+
+this copies `mriya` to `/usr/local/bin/mriya`.
+
+or you can `sudo cp mriya` to `/usr/local/bin`
 
 ### run 
 
 ```startx ./mriya```
 
-or move ```mriya``` to ```/usr/local/bin``` and run ```startx mriya```
-
-(some distro's dont have ```/usr/local/bin``` in their ```$PATH``` by default, run echo $PATH to make sure.)
+or ```startx ./mriya``` (refer to the install section above.)
 
 ### set-up with display managers
 
@@ -60,48 +70,14 @@ Type=Application
 DesktopNames=mriya
 ```
 
+### notes
 
-# keybinds
+- some distros don't have `/usr/local/bin` in `$PATH` by default.
+- recompilation is required after editing `src/config.h`.
 
-- mod + return/enter = open TERM
-- mod + shift + return/enter = open TERM
-- mod + d = open DMENU
-- mod + shift + q = close focused window
-- mod + shift + e = kill wm
-- mod + shift + r = restart wm
-- mod + h / left = focus left
-- mod + l / right = focus right
-- mod + j = decrease inner gap
-- mod + k = increase inner gap
-- mod + shift + j = reset gaps
-- mod + space = zoom (swap with master)
-- mod + shift + space = toggle floating
-- mod + f = toggle maximize
-- mod + shift + f = toggle fullscreen
-- mod + tab = switch to last workspace
-- mod + up = workspace up
-- mod + down = workspace down
-- mod + 1-9 = switch to workspace 1-9
-- mod + shift + 1-9 = move window to workspace 1-9
-- mod + ctrl + 1-9 = toggle workspace 1-9 visibility
-- mod + ctrl + shift + 1-9 = toggle workspace 1-9 on window
-- mod + lmb (drag) = move window 
-- mod + rmb (drag) = resize window 
+# detailed documentation
 
-# applications
-
-edit `config.h`:
-
-```c
-#define TERM "st"
-#define DMENU "dmenu_run"
-#define BROWSER "firefox"
-#define FILEMANAGER "pcmanfm"
-```
-
-# documentation
-
-please refer to [the website](https://hokum-b.github.io/mriya/) or the [.MD files](blank.md)
+refer to [the website](https://hokum-b.github.io/mriya)
 
 # license
 
