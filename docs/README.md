@@ -83,6 +83,8 @@ refer to [the website](https://hokum-b.github.io/mriya)
 
 - [x] stable with little to no crashes.
 - [ ] gui config manager
+- [ ] hot reloading
+- [ ] better tiling
 
 # license
 
