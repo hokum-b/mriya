@@ -81,7 +81,7 @@ refer to [the website](https://hokum-b.github.io/mriya)
 
 # 1.0 release goals
 
-- [ ] stable with little to no crashes.
+- [x] stable with little to no crashes.
 - [ ] gui config manager
 
 # license
