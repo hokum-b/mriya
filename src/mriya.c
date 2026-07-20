@@ -110,6 +110,7 @@ static Monitor *mons = NULL;
 static Monitor *selmon = NULL;
 static int running = 1;
 static int restart = 0;
+static volatile sig_atomic_t need_rekey = 0;
 static Cursor cursor_normal;
 static Cursor cursor_move;
 static Cursor cursor_resize;
@@ -299,6 +300,10 @@ static void sigchld(int unused) {
     if (signal(SIGCHLD, sigchld) == SIG_ERR)
         die("can't install SIGCHLD handler:");
     while (0 < waitpid(-1, NULL, WNOHANG));
+}
+
+static void sigrekey(int sig) {
+    need_rekey = 1;
 }
 
 static void autostart(void) {
@@ -509,6 +514,7 @@ static void focus(Client *c) {
         selmon->sel = c;
         selmon->lastsel[selmon->workspace] = c;
         setfocus(c);
+        XUngrabKeyboard(dpy, CurrentTime);
         if (!c->frame) XSetWindowBorder(dpy, c->window, col_sel_outer_border);
         drawtitle(c);
         if (old && old != c) {
@@ -519,6 +525,7 @@ static void focus(Client *c) {
     } else {
         selmon->sel = NULL;
         XSetInputFocus(dpy, root, RevertToPointerRoot, CurrentTime);
+        XUngrabKeyboard(dpy, CurrentTime);
         XDeleteProperty(dpy, root, XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False));
     }
 }
@@ -544,7 +551,7 @@ static void grabbuttons(Client *c, int focused) {
             XGrabButton(dpy, buttons[i].button,
                 buttons[i].mod | modifiers[j],
                 c->window, False, BUTTONMASK,
-                GrabModeAsync, GrabModeSync, None, None);
+                GrabModeAsync, GrabModeAsync, None, None);
 }
 
 static void updatenumlockmask(void) {
@@ -564,6 +571,10 @@ static void grabkeys(void) {
     unsigned int i, j;
     unsigned int modifiers[] = { 0, LockMask, numlockmask, numlockmask|LockMask };
     KeyCode code;
+    int valid = 0;
+    for (i = 0; i < LENGTH(keys); i++)
+        if (XKeysymToKeycode(dpy, keys[i].keysym)) { valid = 1; break; }
+    if (!valid) return;
     XUngrabKey(dpy, AnyKey, AnyModifier, root);
     for (i = 0; i < LENGTH(keys); i++)
         if ((code = XKeysymToKeycode(dpy, keys[i].keysym)))
@@ -694,7 +705,6 @@ static void restack(Monitor *m) {
         else XRaiseWindow(dpy, m->sel->window);
     }
     arrange(m);
-    XSync(dpy, False);
     while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
@@ -1025,6 +1035,15 @@ static void manage(Window w, XWindowAttributes *wa) {
 static void unmanage(Client *c, int destroyed) {
     Monitor *m = c->monitor;
     Client *nextfocus = NULL;
+    Monitor *mon;
+
+    for (mon = mons; mon; mon = mon->next) {
+        int i;
+        for (i = 0; i < MAX_WORKSPACES; i++) {
+            if (mon->lastsel[i] == c)
+                mon->lastsel[i] = NULL;
+        }
+    }
 
     if (c == m->sel) {
         if (c->prev && ISVISIBLE(c->prev))
@@ -1033,7 +1052,7 @@ static void unmanage(Client *c, int destroyed) {
             nextfocus = c->next;
         else {
             Client *cl;
-            for (cl = m->clients; cl && !ISVISIBLE(cl); cl = cl->next);
+            for (cl = m->clients; cl && (cl == c || !ISVISIBLE(cl)); cl = cl->next);
             if (cl) nextfocus = cl;
         }
         m->sel = NULL;
@@ -1049,7 +1068,6 @@ static void unmanage(Client *c, int destroyed) {
     if (c == m->stack) m->stack = c->next_stack;
 
     if (!destroyed) {
-        XGrabServer(dpy);
         XSetErrorHandler(xerrordummy);
         XSelectInput(dpy, c->window, NoEventMask);
         if (c->frame) {
@@ -1063,12 +1081,12 @@ static void unmanage(Client *c, int destroyed) {
         XUngrabButton(dpy, AnyButton, AnyModifier, c->window);
         setclientstate(c, WithdrawnState);
         XSetErrorHandler(xerror);
-        XUngrabServer(dpy);
         XFlush(dpy);
     } else {
         if (c->frame) XDestroyWindow(dpy, c->frame);
     }
     free(c);
+    XUngrabKeyboard(dpy, CurrentTime);
     focus(nextfocus);
     updateclientlist();
     restack(m);
@@ -1078,12 +1096,10 @@ static void unmanage(Client *c, int destroyed) {
 static void killclient(const char *arg) {
     if (!selmon->sel) return;
     if (!sendevent(selmon->sel, wmatom[WMDelete])) {
-        XGrabServer(dpy);
         XSetErrorHandler(xerrordummy);
         XKillClient(dpy, selmon->sel->window);
         XSync(dpy, False);
         XSetErrorHandler(xerror);
-        XUngrabServer(dpy);
     }
 }
 
@@ -1630,7 +1646,6 @@ static void configurerequest(XEvent *e) {
         wc.sibling = ev->above; wc.stack_mode = ev->detail;
         XConfigureWindow(dpy, ev->window, ev->value_mask, &wc);
     }
-    XSync(dpy, False);
 }
 
 static void destroynotify(XEvent *e) {
@@ -1657,7 +1672,10 @@ static void keypress(XEvent *e) {
 static void mappingnotify(XEvent *e) {
     XMappingEvent *ev = &e->xmapping;
     XRefreshKeyboardMapping(ev);
-    if (ev->request == MappingKeyboard) grabkeys();
+    if (ev->request == MappingKeyboard || ev->request == MappingModifier) {
+        if (ev->request == MappingModifier) updatenumlockmask();
+        grabkeys();
+    }
 }
 
 static void maprequest(XEvent *e) {
@@ -1880,6 +1898,7 @@ static void updateworkspaces(void) {
 static void setup(void) {
     XSetWindowAttributes wa;
     sigchld(0);
+    signal(SIGUSR1, sigrekey);
     checkotherwm();
     screen = DefaultScreen(dpy);
     sw = DisplayWidth(dpy, screen);
@@ -1910,7 +1929,7 @@ static void setup(void) {
                 XGrabButton(dpy, buttons[i].button,
                     buttons[i].mod | modifiers[j],
                     root, True, ButtonPressMask,
-                    GrabModeAsync, GrabModeSync, None, None);
+                    GrabModeAsync, GrabModeAsync, None, None);
     }
     Atom supported[] = {
         wmatom[WMProtocols], wmatom[WMDelete], wmatom[WMState], wmatom[WMTakeFocus],
@@ -1941,9 +1960,16 @@ static void setup(void) {
 
 static void run(void) {
     XEvent ev;
-    while (running && !XNextEvent(dpy, &ev))
+    while (running && !XNextEvent(dpy, &ev)) {
+        XUngrabKeyboard(dpy, CurrentTime);
+        if (need_rekey) {
+            need_rekey = 0;
+            updatenumlockmask();
+            grabkeys();
+        }
         if (handler[ev.type])
             handler[ev.type](&ev);
+    }
 }
 
 static void cleanup(void) {
