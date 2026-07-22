@@ -3,7 +3,6 @@
 is a scrolling x11 window manager.
 
 ![License](https://img.shields.io/badge/license-ISC-blue.svg)
-![Platform](https://img.shields.io/badge/platform-linux%20%7C%20bsd%20%7C%20openindiana-lightgrey.svg)
 
 <p align="center">
   <img src="/assets/img.png" alt="img" width="700">
@@ -83,7 +82,6 @@ refer to [the website](https://hokum-b.github.io/mriya)
 
 - [x] stable with little to no crashes.
 - [ ] gui config manager
-- [ ] hot reloading
 - [ ] tiling within scrolling
 
 # license
