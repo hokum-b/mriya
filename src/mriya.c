@@ -129,7 +129,8 @@ static unsigned long col_title_active_bg;
 static unsigned long col_title_active_fg;
 static unsigned long col_title_inactive_bg;
 static unsigned long col_title_inactive_fg;
-
+static unsigned long col_move_indicator;
+static Window indicator_win = None;
 static GC gc;
 static XFontStruct *font;
 
@@ -450,6 +451,19 @@ static Atom getatomprop(Client *c, Atom prop) {
     return atom;
 }
 
+static long getdesktop(Window w) {
+    int di;
+    unsigned long dl, n;
+    unsigned char *p = NULL;
+    Atom da;
+    if (XGetWindowProperty(dpy, w, netatom[NetWMDesktop], 0L, 1L, False, XA_CARDINAL,
+        &da, &di, &n, &dl, &p) != Success || !p) return -1;
+    if (n == 0) { XFree(p); return -1; }
+    long result = *(long *)p;
+    XFree(p);
+    return result;
+}
+
 static long getstate(Window w) {
     int format;
     long result = -1;
@@ -585,6 +599,8 @@ static void grabkeys(void) {
 
 static int get_total_strip_width(Monitor *m) {
     Client *c;
+    Client *tiled[MAX_CLIENTS];
+    int n = 0;
     int total = 2 * outer_gaps;
     int usable = m->width - 2 * outer_gaps;
     int col_w = (usable - inner_gaps) / 2;
@@ -592,12 +608,18 @@ static int get_total_strip_width(Monitor *m) {
     if (col_w < 200) { col_w = 200; actual_inner = inner_gaps; }
 
     for (c = m->clients; c; c = c->next) {
-        if (!ISVISIBLE(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN) continue;
-        if (c->state == STATE_MAXIMIZED)
-            total += c->width;
-        else
-            total += col_w;
-        total += actual_inner;
+        if (!ISVISIBLE(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN || c->ispanel) continue;
+        if (n < MAX_CLIENTS) tiled[n++] = c;
+    }
+
+    int i = 0;
+    while (i < n) {
+        if (tiled[i]->state == STATE_MAXIMIZED) {
+            total += tiled[i]->width + actual_inner;
+        } else {
+            total += col_w + actual_inner;
+        }
+        i++;
     }
     if (total > 2 * outer_gaps)
         total -= actual_inner;
@@ -606,6 +628,8 @@ static int get_total_strip_width(Monitor *m) {
 
 static void arrange(Monitor *m) {
     Client *c;
+    Client *tiled[MAX_CLIENTS];
+    int n = 0;
     int total_width = 0;
     int mon_y = m->y;
     int mon_h = m->height;
@@ -650,18 +674,29 @@ static void arrange(Monitor *m) {
             resize(c, m->x, m->y, m->width, m->height, 0);
             continue;
         }
-        c->x = m->x + outer_gaps + total_width + m->scroll_x;
-        c->y = mon_y + outer_gaps;
-        c->height = mon_h - 2 * outer_gaps - (SHOW_TITLEBAR ? TITLE_HEIGHT : 0);
+        if (n < MAX_CLIENTS) tiled[n++] = c;
+    }
 
-        if (c->state == STATE_MAXIMIZED) {
-            resize(c, c->x, c->y, c->width, c->height, 0);
-            total_width += c->width + actual_inner;
-            continue;
+    int i = 0;
+    while (i < n) {
+        Client *c1 = tiled[i];
+        int col_x = m->x + outer_gaps + total_width + m->scroll_x;
+        int total_col_h = mon_h - 2 * outer_gaps;
+        int title_h = SHOW_TITLEBAR ? TITLE_HEIGHT : 0;
+        if (c1->state == STATE_MAXIMIZED) {
+            c1->x = col_x;
+            c1->y = mon_y + outer_gaps;
+            c1->height = total_col_h - title_h;
+            resize(c1, c1->x, c1->y, c1->width, c1->height, 0);
+        } else {
+            c1->x = col_x;
+            c1->y = mon_y + outer_gaps;
+            c1->width = col_w;
+            c1->height = total_col_h - title_h;
+            resize(c1, c1->x, c1->y, c1->width, c1->height, 0);
         }
-        c->width = col_w;
-        resize(c, c->x, c->y, c->width, c->height, 0);
-        total_width += col_w + actual_inner;
+        total_width += (c1->state == STATE_MAXIMIZED ? c1->width : col_w) + actual_inner;
+        i++;
     }
 }
 
@@ -969,11 +1004,21 @@ static void manage(Window w, XWindowAttributes *wa) {
     c->window = w;
     c->x = c->orig_x = wa->x;
     c->y = c->orig_y = wa->y;
-    c->width = c->orig_width = wa->width;
+    c->orig_width = wa->width;
     c->height = c->orig_height = wa->height;
-    c->state = STATE_NORMAL;
-    c->prev_state = STATE_NORMAL;
+    int usable = selmon->width - 2 * outer_gaps;
+    int col_w = (usable - inner_gaps) / 2;
+    if (col_w < 200) col_w = 200;
+
+    c->state = STATE_MAXIMIZED;
+    c->prev_state = STATE_MAXIMIZED;
+    c->width = col_w;
     c->workspace = selmon->workspace;
+    {
+        long ws = getdesktop(w);
+        if (ws >= 0 && ws < MAX_WORKSPACES)
+            c->workspace = (int)ws;
+    }
     c->monitor = selmon;
     c->mapped = 1;
     c->border_width = BORDER_WIDTH;
@@ -1283,8 +1328,38 @@ static void sendmon(Client *c, Monitor *m) {
     updateworkspaces();
 }
 
+typedef struct {
+    Client *first;
+    Client *last;
+    int count;
+} ColumnInfo;
+
+static int get_columns(Monitor *m, ColumnInfo *cols, int max_cols) {
+    Client *c;
+    Client *tiled[MAX_CLIENTS];
+    int n = 0;
+    int num_cols = 0;
+
+    for (c = m->clients; c; c = c->next) {
+        if (!ISVISIBLE(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN || c->ispanel)
+            continue;
+        if (n < MAX_CLIENTS)
+            tiled[n++] = c;
+    }
+
+    int i = 0;
+    while (i < n && num_cols < max_cols) {
+        cols[num_cols].first = tiled[i];
+        cols[num_cols].last = tiled[i];
+        cols[num_cols].count = 1;
+        num_cols++;
+        i++;
+    }
+    return num_cols;
+}
+
 static void movemouse(const char *arg) {
-    int x, y, ocx, ocy, nx, ny;
+    int x, y, ocx, ocy, nx = 0, ny = 0;
     Client *c;
     XEvent ev;
     Time lasttime = 0;
@@ -1300,6 +1375,13 @@ static void movemouse(const char *arg) {
 
     int orig_scroll_x = selmon->scroll_x;
     int dragging = 0;
+
+    if (SHOW_MOVE_INDICATOR && indicator_win != None) {
+        int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
+        XMoveResizeWindow(dpy, indicator_win, c->x, c->y, c->width, c->height + title_h);
+        XMapWindow(dpy, indicator_win);
+        XRaiseWindow(dpy, indicator_win);
+    }
 
     do {
         XMaskEvent(dpy, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
@@ -1359,44 +1441,57 @@ static void movemouse(const char *arg) {
                     int win_w = (c->state == STATE_MAXIMIZED) ? c->width : col_w;
                     int threshold = win_w / 4;
 
-                    if (dx > threshold && c->next && ISVISIBLE(c->next)) {
-                        Client *t = c->next;
-                        while (t && !ISVISIBLE(t)) t = t->next;
-                        if (t) {
-                            if (c->prev) c->prev->next = c->next;
-                            if (c->next) c->next->prev = c->prev;
-                            if (c == selmon->clients) selmon->clients = c->next;
-                            c->next = t->next;
-                            c->prev = t;
-                            if (t->next) t->next->prev = c;
-                            t->next = c;
-                            x += win_w + actual_inner;
-                            ocx = c->x;
-                            arrange(selmon);
-                        }
-                    } else if (dx < -threshold && c->prev && ISVISIBLE(c->prev)) {
-                        Client *t = c->prev;
-                        while (t && !ISVISIBLE(t)) t = t->prev;
-                        if (t) {
-                            if (c->prev) c->prev->next = c->next;
-                            if (c->next) c->next->prev = c->prev;
-                            if (c == selmon->clients) selmon->clients = c->next;
-                            c->prev = t->prev;
-                            c->next = t;
-                            if (t->prev) t->prev->next = c;
-                            t->prev = c;
-                            if (!c->prev) selmon->clients = c;
-                            x -= win_w + actual_inner;
-                            ocx = c->x;
-                            arrange(selmon);
+                    ColumnInfo cols[MAX_CLIENTS];
+                    int num_cols = get_columns(selmon, cols, MAX_CLIENTS);
+                    int c_col = -1;
+                    for (int ci = 0; ci < num_cols; ci++) {
+                        if (c == cols[ci].first || c == cols[ci].last) {
+                            c_col = ci;
+                            break;
                         }
                     }
+
+                    if (dx > threshold && c_col >= 0 && c_col + 1 < num_cols) {
+                        Client *t_last = cols[c_col + 1].last;
+                        if (c->prev) c->prev->next = c->next;
+                        if (c->next) c->next->prev = c->prev;
+                        if (c == selmon->clients) selmon->clients = c->next;
+                        c->prev = t_last;
+                        c->next = t_last->next;
+                        if (t_last->next) t_last->next->prev = c;
+                        t_last->next = c;
+                        x += win_w + actual_inner;
+                        ocx = c->x;
+                        arrange(selmon);
+                    } else if (dx < -threshold && c_col > 0) {
+                        Client *t_first = cols[c_col - 1].first;
+                        if (c->prev) c->prev->next = c->next;
+                        if (c->next) c->next->prev = c->prev;
+                        if (c == selmon->clients) selmon->clients = c->next;
+                        c->prev = t_first->prev;
+                        c->next = t_first;
+                        if (t_first->prev) t_first->prev->next = c;
+                        else selmon->clients = c;
+                        t_first->prev = c;
+                        x -= win_w + actual_inner;
+                        ocx = c->x;
+                        arrange(selmon);
+                    }
                 }
+            }
+            if (SHOW_MOVE_INDICATOR && indicator_win != None) {
+                int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
+                int ix = (c->state == STATE_FLOATING) ? nx : c->x;
+                int iy = (c->state == STATE_FLOATING) ? ny : c->y;
+                XMoveResizeWindow(dpy, indicator_win, ix, iy, c->width, c->height + title_h);
+                XRaiseWindow(dpy, indicator_win);
             }
             break;
         }
     } while (ev.type != ButtonRelease);
 done_move:
+    if (SHOW_MOVE_INDICATOR && indicator_win != None)
+        XUnmapWindow(dpy, indicator_win);
     XUngrabPointer(dpy, CurrentTime);
 }
 
@@ -1793,6 +1888,7 @@ static void initcolors(void) {
     XAllocNamedColor(dpy, cmap, TITLE_ACTIVE_FG, &color, &color);   col_title_active_fg = color.pixel;
     XAllocNamedColor(dpy, cmap, TITLE_INACTIVE_BG, &color, &color); col_title_inactive_bg = color.pixel;
     XAllocNamedColor(dpy, cmap, TITLE_INACTIVE_FG, &color, &color); col_title_inactive_fg = color.pixel;
+    XAllocNamedColor(dpy, cmap, MOVE_INDICATOR_COLOR, &color, &color); col_move_indicator = color.pixel;
 }
 
 static int ignorewindow(Window w) {
@@ -1875,20 +1971,17 @@ static void updateworkspaces(void) {
     XChangeProperty(dpy, root, netatom[NetDesktopNames], XInternAtom(dpy, "UTF8_STRING", False), 8,
         PropModeReplace, (unsigned char *)names, pos);
 
-    for (i = 0; i < count; i++) {
-        if (ws_map[i] == selmon->workspace) {
-            long cd = i;
-            XChangeProperty(dpy, root, netatom[NetCurrentDesktop], XA_CARDINAL, 32,
-                PropModeReplace, (unsigned char *)&cd, 1);
-            break;
-        }
+    {
+        long cd = selmon->workspace;
+        XChangeProperty(dpy, root, netatom[NetCurrentDesktop], XA_CARDINAL, 32,
+            PropModeReplace, (unsigned char *)&cd, 1);
     }
 
     for (i = 0; i < count; i++) {
         for (m = mons; m; m = m->next)
             for (c = m->clients; c; c = c->next)
                 if (c->workspace == ws_map[i]) {
-                    long desktop = i;
+                    long desktop = ws_map[i];
                     XChangeProperty(dpy, c->window, netatom[NetWMDesktop], XA_CARDINAL, 32,
                         PropModeReplace, (unsigned char *)&desktop, 1);
                 }
@@ -1906,6 +1999,10 @@ static void setup(void) {
     root = RootWindow(dpy, screen);
     initatoms();
     initcolors();
+    wa.override_redirect = True;
+    wa.background_pixel = col_move_indicator;
+    wa.border_pixel = col_sel_outer_border;
+    indicator_win = XCreateWindow(dpy, root, 0, 0, 1, 1, 2, CopyFromParent, InputOutput, CopyFromParent, CWOverrideRedirect | CWBackPixel | CWBorderPixel, &wa);
     font = XLoadQueryFont(dpy, "fixed");
     if (!font) die("mriya: cannot load font");
     gc = XCreateGC(dpy, root, 0, NULL);
@@ -1954,6 +2051,8 @@ static void setup(void) {
     XDeleteProperty(dpy, root, XInternAtom(dpy, "_NET_CLIENT_LIST_STACKING", False));
     scan();
     showhide(selmon->stack);
+    XSync(dpy, False);
+    { XEvent ev; while (XCheckTypedEvent(dpy, UnmapNotify, &ev)); }
     autostart();
     updateworkspaces();
 }
@@ -1995,6 +2094,7 @@ static void cleanup(void) {
     XFreeFont(dpy, font);
     XFreeGC(dpy, gc);
     XDestroyWindow(dpy, wmcheckwin);
+    if (indicator_win != None) XDestroyWindow(dpy, indicator_win);
     XSetInputFocus(dpy, PointerRoot, RevertToPointerRoot, CurrentTime);
     XCloseDisplay(dpy);
 }
