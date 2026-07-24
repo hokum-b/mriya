@@ -81,8 +81,8 @@ refer to [the website](https://hokum-b.github.io/mriya)
 # 1.0 release goals
 
 - [x] stable with little to no crashes.
-- [ ] gui config manager
-- [ ] tiling within scrolling
+- [ ] hot reloads
+- [ ] plenty of other qol features
 
 # license
 
