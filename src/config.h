@@ -7,7 +7,7 @@
 #define BORDER_WIDTH (OUTER_BORDER_WIDTH + INNER_BORDER_WIDTH)
 
 // gap and snap settings
-#define INNER_GAP 15
+#define INNER_GAP 30
 #define OUTER_GAP 50
 #define SNAP 32
 
@@ -113,11 +113,9 @@ static void ws_up(const char *arg);
 static void ws_down(const char *arg);
 static void movemouse(const char *arg);
 static void resizemouse(const char *arg);
-
 // keybindings
 static Key keys[] = {
     // launch programs
-    KEY(MODKEY, XK_Return, spawn, TERM)
     KEY(MODKEY|ShiftMask, XK_Return, spawn, TERM)
     KEY(MODKEY, XK_d, spawn, DMENU)
     // close and quit
@@ -174,5 +172,12 @@ static Button buttons[] = {
 #define INSERT_END 1
 
 #define STRIP_ALIGN 0
+
+#define TILE_IN_STRIP 0
+
+#define SHOW_MOVE_INDICATOR 1
+#define MOVE_INDICATOR_COLOR "#557799"
+#define MOVE_INDICATOR_BG MOVE_INDICATOR_COLOR
+#define MOVE_OVERLAY_COLOR MOVE_INDICATOR_COLOR
 
 #endif
