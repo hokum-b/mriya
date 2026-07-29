@@ -93,28 +93,8 @@ static const Layout layouts[] = {
 // keybind shorthand
 #define KEY(MOD, KEY, FUNC, ARG) { MOD, KEY, FUNC, ARG },
 
-// forward declarations for keybind callbacks
-static void spawn(const char *arg);
-static void killclient(const char *arg);
-static void quit(const char *arg);
-static void restartwm(const char *arg);
-static void focusleft(const char *arg);
-static void focusright(const char *arg);
-static void setgaps(const char *arg);
-static void zoom(const char *arg);
-static void togglefloating(const char *arg);
-static void togglemaximize(const char *arg);
-static void togglefullscreen(const char *arg);
-static void view(const char *arg);
-static void toggleview(const char *arg);
-static void tag(const char *arg);
-static void toggletag(const char *arg);
-static void ws_up(const char *arg);
-static void ws_down(const char *arg);
-static void movemouse(const char *arg);
-static void resizemouse(const char *arg);
-// keybindings
-static Key keys[] = {
+// default keybindings (copied to runtime keys[] at startup)
+static Key default_keys[] = {
     // launch programs
     KEY(MODKEY|ShiftMask, XK_Return, spawn, TERM)
     KEY(MODKEY, XK_d, spawn, DMENU)
@@ -162,8 +142,8 @@ static Key keys[] = {
     TAGKEYS(XK_9, 8)
 };
 
-// mouse bindings
-static Button buttons[] = {
+// default mouse bindings (copied to runtime buttons[] at startup)
+static Button default_buttons[] = {
     { MODKEY, Button1, movemouse, NULL },
     { MODKEY, Button3, resizemouse, NULL },
 };

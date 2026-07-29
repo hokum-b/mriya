@@ -15,6 +15,8 @@
 #include <errno.h>
 #include <stdarg.h>
 
+#include "parser.h"
+
 typedef enum { STATE_NORMAL, STATE_FLOATING, STATE_MAXIMIZED, STATE_FULLSCREEN } ClientState;
 
 #define MAX_CLIENTS 256
@@ -95,7 +97,50 @@ typedef struct {
 static void tile(Monitor *m);
 static void monocle(Monitor *m);
 
+// forward declarations needed by config.h default_keys/default_buttons
+void spawn(const char *arg);
+void killclient(const char *arg);
+void quit(const char *arg);
+void restartwm(const char *arg);
+void focusleft(const char *arg);
+void focusright(const char *arg);
+void ws_up(const char *arg);
+void ws_down(const char *arg);
+void setgaps(const char *arg);
+void zoom(const char *arg);
+void togglefloating(const char *arg);
+void togglemaximize(const char *arg);
+void togglefullscreen(const char *arg);
+void view(const char *arg);
+void toggleview(const char *arg);
+void tag(const char *arg);
+void toggletag(const char *arg);
+void movemouse(const char *arg);
+void resizemouse(const char *arg);
+
 #include "config.h"
+
+// runtime config variables (extern for parser.c)
+char norm_bg[64] = NORM_BG;
+char norm_outer_border[64] = NORM_OUTER_BORDER;
+char norm_inner_border[64] = NORM_INNER_BORDER;
+char sel_bg[64] = SEL_BG;
+char sel_outer_border[64] = SEL_OUTER_BORDER;
+char sel_inner_border[64] = SEL_INNER_BORDER;
+char urgent_color[64] = URGENT_COLOR;
+char title_active_bg[64] = TITLE_ACTIVE_BG;
+char title_active_fg[64] = TITLE_ACTIVE_FG;
+char title_inactive_bg[64] = TITLE_INACTIVE_BG;
+char title_inactive_fg[64] = TITLE_INACTIVE_FG;
+int snap_val = SNAP;
+int outer_border_width = OUTER_BORDER_WIDTH;
+int inner_border_width = INNER_BORDER_WIDTH;
+unsigned int default_modkey = MODKEY;
+
+Key keys[256];
+int nkeys = 0;
+Button buttons[256];
+int nbuttons = 0;
 
 #define LENGTH(X) (sizeof X / sizeof X[0])
 #define BUTTONMASK (ButtonPressMask|ButtonReleaseMask)
@@ -114,8 +159,8 @@ static volatile sig_atomic_t need_rekey = 0;
 static Cursor cursor_normal;
 static Cursor cursor_move;
 static Cursor cursor_resize;
-static int inner_gaps = INNER_GAP;
-static int outer_gaps = OUTER_GAP;
+int inner_gaps = INNER_GAP;
+int outer_gaps = OUTER_GAP;
 static unsigned int numlockmask = 0;
 
 static unsigned long col_norm_bg;
@@ -172,8 +217,8 @@ static void focusin(XEvent *e);
 static void focusmon(const char *arg);
 static void ensure_visible(Client *c);
 
-static void focusleft(const char *arg);
-static void focusright(const char *arg);
+void focusleft(const char *arg);
+void focusright(const char *arg);
 static Atom getatomprop(Client *c, Atom prop);
 static int getrootptr(int *x, int *y);
 static long getstate(Window w);
@@ -181,22 +226,22 @@ static int gettextprop(Window w, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *c, int focused);
 static void grabkeys(void);
 static void initatoms(void);
-static void initcolors(void);
+void initcolors(void);
 static void buttonpress(XEvent *e);
 static void keypress(XEvent *e);
-static void killclient(const char *arg);
+void killclient(const char *arg);
 static void manage(Window w, XWindowAttributes *wa);
 static void mappingnotify(XEvent *e);
 static void maprequest(XEvent *e);
 static void motionnotify(XEvent *e);
-static void movemouse(const char *arg);
+void movemouse(const char *arg);
 static void propertynotify(XEvent *e);
-static void quit(const char *arg);
+void quit(const char *arg);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void configure(Client *c);
-static void resizemouse(const char *arg);
+void resizemouse(const char *arg);
 static void restack(Monitor *m);
-static void restartwm(const char *arg);
+void restartwm(const char *arg);
 static void run(void);
 static void scan(void);
 static int ignorewindow(Window w);
@@ -208,14 +253,14 @@ static void setfullscreen(Client *c, int fullscreen);
 static void setup(void);
 static void showhide(Client *c);
 static void sigchld(int unused);
-static void spawn(const char *arg);
-static void tag(const char *arg);
+void spawn(const char *arg);
+void tag(const char *arg);
 static void tagmon(const char *arg);
-static void togglefloating(const char *arg);
-static void togglemaximize(const char *arg);
-static void togglefullscreen(const char *arg);
-static void toggletag(const char *arg);
-static void toggleview(const char *arg);
+void togglefloating(const char *arg);
+void togglemaximize(const char *arg);
+void togglefullscreen(const char *arg);
+void toggletag(const char *arg);
+void toggleview(const char *arg);
 static void unmanage(Client *c, int destroyed);
 static void unmapnotify(XEvent *e);
 static void updateclientlist(void);
@@ -228,19 +273,19 @@ static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
 static void updateworkspaces(void);
 static int workspace_has_clients(int ws);
-static void view(const char *arg);
+void view(const char *arg);
 static Client *wintoclient(Window w);
 static Client *frametoclient(Window w);
 static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
-static void zoom(const char *arg);
+void zoom(const char *arg);
 static void scrollleft(const char *arg);
 static void scrollright(const char *arg);
-static void setgaps(const char *arg);
-static void ws_up(const char *arg);
-static void ws_down(const char *arg);
+void setgaps(const char *arg);
+void ws_up(const char *arg);
+void ws_down(const char *arg);
 static void arrange(Monitor *m);
 static int get_total_strip_width(Monitor *m);
 static void attach(Client *c);
@@ -555,12 +600,12 @@ static void unfocus(Client *c, int setfocus) {
     }
 }
 
-static void grabbuttons(Client *c, int focused) {
+void grabbuttons(Client *c, int focused) {
     unsigned int i, j;
     unsigned int modifiers[] = { 0, LockMask, numlockmask, numlockmask|LockMask };
     XUngrabButton(dpy, AnyButton, AnyModifier, c->window);
     if (!focused) return;
-    for (i = 0; i < LENGTH(buttons); i++)
+    for (i = 0; i < nbuttons; i++)
         for (j = 0; j < LENGTH(modifiers); j++)
             XGrabButton(dpy, buttons[i].button,
                 buttons[i].mod | modifiers[j],
@@ -581,16 +626,16 @@ static void updatenumlockmask(void) {
     XFreeModifiermap(modmap);
 }
 
-static void grabkeys(void) {
+void grabkeys(void) {
     unsigned int i, j;
     unsigned int modifiers[] = { 0, LockMask, numlockmask, numlockmask|LockMask };
     KeyCode code;
     int valid = 0;
-    for (i = 0; i < LENGTH(keys); i++)
+    for (i = 0; i < nkeys; i++)
         if (XKeysymToKeycode(dpy, keys[i].keysym)) { valid = 1; break; }
     if (!valid) return;
     XUngrabKey(dpy, AnyKey, AnyModifier, root);
-    for (i = 0; i < LENGTH(keys); i++)
+    for (i = 0; i < nkeys; i++)
         if ((code = XKeysymToKeycode(dpy, keys[i].keysym)))
             for (j = 0; j < LENGTH(modifiers); j++)
                 XGrabKey(dpy, code, keys[i].mod | modifiers[j], root,
@@ -831,7 +876,7 @@ static void scrollright(const char *arg) {
     arrange(selmon);
 }
 
-static void ws_up(const char *arg) {
+void ws_up(const char *arg) {
     int prev_ws = selmon->workspace;
     if (selmon->workspace > 0) {
         selmon->lastsel[prev_ws] = selmon->sel;
@@ -848,7 +893,7 @@ static void ws_up(const char *arg) {
     }
 }
 
-static void ws_down(const char *arg) {
+void ws_down(const char *arg) {
     int prev_ws = selmon->workspace;
     if (selmon->workspace < MAX_WORKSPACES - 1) {
         selmon->lastsel[prev_ws] = selmon->sel;
@@ -865,7 +910,7 @@ static void ws_down(const char *arg) {
     }
 }
 
-static void setgaps(const char *arg) {
+void setgaps(const char *arg) {
     if (arg[0] == '0') { inner_gaps = INNER_GAP; outer_gaps = OUTER_GAP; }
     else if (arg[0] == '-') { inner_gaps -= 2; outer_gaps -= 2; }
     else if (arg[0] == '+') { inner_gaps += 2; outer_gaps += 2; }
@@ -935,7 +980,7 @@ static void ensure_visible(Client *c) {
     }
 }
 
-static void focusleft(const char *arg) {
+void focusleft(const char *arg) {
     Client *c;
     if (!selmon->sel) {
         for (c = selmon->clients; c && !ISVISIBLE(c); c = c->next);
@@ -952,7 +997,7 @@ static void focusleft(const char *arg) {
     }
 }
 
-static void focusright(const char *arg) {
+void focusright(const char *arg) {
     Client *c;
     if (!selmon->sel) {
         for (c = selmon->clients; c && !ISVISIBLE(c); c = c->next);
@@ -1138,7 +1183,7 @@ static void unmanage(Client *c, int destroyed) {
     updateworkspaces();
 }
 
-static void killclient(const char *arg) {
+void killclient(const char *arg) {
     if (!selmon->sel) return;
     if (!sendevent(selmon->sel, wmatom[WMDelete])) {
         XSetErrorHandler(xerrordummy);
@@ -1177,13 +1222,13 @@ static void setfullscreen(Client *c, int fullscreen) {
     }
 }
 
-static void togglefullscreen(const char *arg) {
+void togglefullscreen(const char *arg) {
     if (!selmon->sel) return;
     setfullscreen(selmon->sel, selmon->sel->state != STATE_FULLSCREEN);
     restack(selmon);
 }
 
-static void togglemaximize(const char *arg) {
+void togglemaximize(const char *arg) {
     Client *c = selmon->sel;
     if (!c) return;
     if (c->state == STATE_MAXIMIZED) {
@@ -1202,7 +1247,7 @@ static void togglemaximize(const char *arg) {
     restack(selmon);
 }
 
-static void togglefloating(const char *arg) {
+void togglefloating(const char *arg) {
     Client *c = selmon->sel;
     if (!c) return;
     if (c->state == STATE_FULLSCREEN) setfullscreen(c, 0);
@@ -1234,7 +1279,7 @@ static void togglefloating(const char *arg) {
     restack(selmon);
 }
 
-static void zoom(const char *arg) {
+void zoom(const char *arg) {
     Client *c = selmon->sel;
     if (!c || c->state != STATE_NORMAL) return;
     if (c != selmon->clients) {
@@ -1249,7 +1294,7 @@ static void zoom(const char *arg) {
     restack(selmon);
 }
 
-static void tag(const char *arg) {
+void tag(const char *arg) {
     int tag;
     if (!selmon->sel) return;
     tag = arg[0] - '0';
@@ -1260,7 +1305,7 @@ static void tag(const char *arg) {
     updateworkspaces();
 }
 
-static void toggletag(const char *arg) {
+void toggletag(const char *arg) {
     int tag;
     if (!selmon->sel) return;
     tag = arg[0] - '0';
@@ -1273,7 +1318,7 @@ static void toggletag(const char *arg) {
     updateworkspaces();
 }
 
-static void view(const char *arg) {
+void view(const char *arg) {
     int tag;
     int prev_ws = selmon->workspace;
     selmon->lastsel[prev_ws] = selmon->sel;
@@ -1294,7 +1339,7 @@ static void view(const char *arg) {
     updateworkspaces();
 }
 
-static void toggleview(const char *arg) {
+void toggleview(const char *arg) {
     int tag;
     tag = arg[0] - '0';
     if (tag >= 0 && tag < MAX_WORKSPACES) {
@@ -1358,7 +1403,7 @@ static int get_columns(Monitor *m, ColumnInfo *cols, int max_cols) {
     return num_cols;
 }
 
-static void movemouse(const char *arg) {
+void movemouse(const char *arg) {
     int x, y, ocx, ocy, nx = 0, ny = 0;
     Client *c;
     XEvent ev;
@@ -1404,21 +1449,21 @@ static void movemouse(const char *arg) {
             if (c->state == STATE_FLOATING) {
                 nx = ocx + (ev.xmotion.x - x);
                 ny = ocy + (ev.xmotion.y - y);
-                if (abs(selmon->x + outer_gaps - nx) < SNAP) nx = selmon->x + outer_gaps;
-                else if (abs((selmon->x + selmon->width - outer_gaps) - (nx + c->width)) < SNAP)
+                if (abs(selmon->x + outer_gaps - nx) < snap_val) nx = selmon->x + outer_gaps;
+                else if (abs((selmon->x + selmon->width - outer_gaps) - (nx + c->width)) < snap_val)
                     nx = selmon->x + selmon->width - outer_gaps - c->width;
-                if (abs(selmon->y + outer_gaps - ny) < SNAP) ny = selmon->y + outer_gaps;
-                else if (abs((selmon->y + selmon->height - outer_gaps) - (ny + c->height)) < SNAP)
+                if (abs(selmon->y + outer_gaps - ny) < snap_val) ny = selmon->y + outer_gaps;
+                else if (abs((selmon->y + selmon->height - outer_gaps) - (ny + c->height)) < snap_val)
                     ny = selmon->y + selmon->height - outer_gaps - c->height;
                 resize(c, nx, ny, c->width, c->height, 1);
             } else {
                 int dx = ev.xmotion.x - x;
                 int dy = ev.xmotion.y - y;
 
-                if (!dragging && (abs(dx) > SNAP || abs(dy) > SNAP))
+                if (!dragging && (abs(dx) > snap_val || abs(dy) > snap_val))
                     dragging = 1;
 
-                if (dragging && abs(dy) > SNAP) {
+                if (dragging && abs(dy) > snap_val) {
                     selmon->scroll_x = orig_scroll_x + dx;
 
                     int total = get_total_strip_width(selmon);
@@ -1495,7 +1540,7 @@ done_move:
     XUngrabPointer(dpy, CurrentTime);
 }
 
-static void resizemouse(const char *arg) {
+void resizemouse(const char *arg) {
     int nw, nh;
     Client *c;
     XEvent ev;
@@ -1562,7 +1607,7 @@ done_resize:
     while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
-static void spawn(const char *arg) {
+void spawn(const char *arg) {
     if (fork() == 0) {
         if (dpy) close(ConnectionNumber(dpy));
         setsid();
@@ -1656,7 +1701,7 @@ static void buttonpress(XEvent *e) {
             }
     }
 
-    for (i = 0; i < LENGTH(buttons); i++)
+    for (i = 0; i < nbuttons; i++)
         if (buttons[i].func && buttons[i].button == ev->button
             && CLEANMASK(buttons[i].mod) == CLEANMASK(ev->state))
             buttons[i].func(buttons[i].arg);
@@ -1759,7 +1804,7 @@ static void keypress(XEvent *e) {
     KeySym keysym;
     XKeyEvent *ev = &e->xkey;
     keysym = XkbKeycodeToKeysym(dpy, ev->keycode, 0, 0);
-    for (i = 0; i < LENGTH(keys); i++)
+    for (i = 0; i < nkeys; i++)
         if (keysym == keys[i].keysym && CLEANMASK(keys[i].mod) == CLEANMASK(ev->state) && keys[i].func)
             keys[i].func(keys[i].arg);
 }
@@ -1874,20 +1919,20 @@ static void initatoms(void) {
     net_supporting_wm_check = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
 }
 
-static void initcolors(void) {
+void initcolors(void) {
     XColor color;
     Colormap cmap = DefaultColormap(dpy, screen);
-    XAllocNamedColor(dpy, cmap, NORM_BG, &color, &color);    col_norm_bg = color.pixel;
-    XAllocNamedColor(dpy, cmap, NORM_OUTER_BORDER, &color, &color); col_norm_outer_border = color.pixel;
-    XAllocNamedColor(dpy, cmap, NORM_INNER_BORDER, &color, &color); col_norm_inner_border = color.pixel;
-    XAllocNamedColor(dpy, cmap, SEL_BG, &color, &color);     col_sel_bg = color.pixel;
-    XAllocNamedColor(dpy, cmap, SEL_OUTER_BORDER, &color, &color); col_sel_outer_border = color.pixel;
-    XAllocNamedColor(dpy, cmap, SEL_INNER_BORDER, &color, &color); col_sel_inner_border = color.pixel;
-    XAllocNamedColor(dpy, cmap, URGENT_COLOR, &color, &color); col_urgent = color.pixel;
-    XAllocNamedColor(dpy, cmap, TITLE_ACTIVE_BG, &color, &color);   col_title_active_bg = color.pixel;
-    XAllocNamedColor(dpy, cmap, TITLE_ACTIVE_FG, &color, &color);   col_title_active_fg = color.pixel;
-    XAllocNamedColor(dpy, cmap, TITLE_INACTIVE_BG, &color, &color); col_title_inactive_bg = color.pixel;
-    XAllocNamedColor(dpy, cmap, TITLE_INACTIVE_FG, &color, &color); col_title_inactive_fg = color.pixel;
+    XAllocNamedColor(dpy, cmap, norm_bg, &color, &color);    col_norm_bg = color.pixel;
+    XAllocNamedColor(dpy, cmap, norm_outer_border, &color, &color); col_norm_outer_border = color.pixel;
+    XAllocNamedColor(dpy, cmap, norm_inner_border, &color, &color); col_norm_inner_border = color.pixel;
+    XAllocNamedColor(dpy, cmap, sel_bg, &color, &color);     col_sel_bg = color.pixel;
+    XAllocNamedColor(dpy, cmap, sel_outer_border, &color, &color); col_sel_outer_border = color.pixel;
+    XAllocNamedColor(dpy, cmap, sel_inner_border, &color, &color); col_sel_inner_border = color.pixel;
+    XAllocNamedColor(dpy, cmap, urgent_color, &color, &color); col_urgent = color.pixel;
+    XAllocNamedColor(dpy, cmap, title_active_bg, &color, &color);   col_title_active_bg = color.pixel;
+    XAllocNamedColor(dpy, cmap, title_active_fg, &color, &color);   col_title_active_fg = color.pixel;
+    XAllocNamedColor(dpy, cmap, title_inactive_bg, &color, &color); col_title_inactive_bg = color.pixel;
+    XAllocNamedColor(dpy, cmap, title_inactive_fg, &color, &color); col_title_inactive_fg = color.pixel;
     XAllocNamedColor(dpy, cmap, MOVE_INDICATOR_COLOR, &color, &color); col_move_indicator = color.pixel;
 }
 
@@ -1988,6 +2033,28 @@ static void updateworkspaces(void) {
     }
 }
 
+static void load_default_config(void) {
+    nkeys = 0;
+    for (int i = 0; i < LENGTH(default_keys); i++)
+        keys[nkeys++] = default_keys[i];
+    nbuttons = 0;
+    for (int i = 0; i < LENGTH(default_buttons); i++)
+        buttons[nbuttons++] = default_buttons[i];
+}
+
+void reload_config(const char *arg) {
+    Key saved_keys[256];
+    int saved_nkeys = nkeys;
+    memcpy(saved_keys, keys, sizeof(Key) * nkeys);
+    if (parse_config() != 0) {
+        nkeys = saved_nkeys;
+        memcpy(keys, saved_keys, sizeof(Key) * saved_nkeys);
+    }
+    initcolors();
+    grabkeys();
+    arrange(selmon);
+}
+
 static void setup(void) {
     XSetWindowAttributes wa;
     sigchld(0);
@@ -1998,6 +2065,9 @@ static void setup(void) {
     sh = DisplayHeight(dpy, screen);
     root = RootWindow(dpy, screen);
     initatoms();
+    load_default_config();
+    if (parse_config() != 0)
+        load_default_config();
     initcolors();
     wa.override_redirect = True;
     wa.background_pixel = col_move_indicator;
@@ -2021,7 +2091,7 @@ static void setup(void) {
     {
         unsigned int i, j;
         unsigned int modifiers[] = { 0, LockMask, numlockmask, numlockmask|LockMask };
-        for (i = 0; i < LENGTH(buttons); i++)
+        for (i = 0; i < nbuttons; i++)
             for (j = 0; j < LENGTH(modifiers); j++)
                 XGrabButton(dpy, buttons[i].button,
                     buttons[i].mod | modifiers[j],
@@ -2099,11 +2169,11 @@ static void cleanup(void) {
     XCloseDisplay(dpy);
 }
 
-static void quit(const char *arg) {
+void quit(const char *arg) {
     running = 0;
 }
 
-static void restartwm(const char *arg) {
+void restartwm(const char *arg) {
     restart = 1;
     running = 0;
 }
