@@ -163,7 +163,7 @@ int show_titlebar = 1;
 int show_title = 1;
 int show_buttons = 1;
 int insert_end = 1;
-int strip_align = 2;
+int strip_align = 0;
 int show_move_indicator = 1;
 char move_indicator_color[64] = "#ede5d4";
 static unsigned int numlockmask = 0;
@@ -1050,8 +1050,8 @@ static void manage(Window w, XWindowAttributes *wa) {
     int col_w = (usable - inner_gaps) / 2;
     if (col_w < 200) col_w = 200;
 
-    c->state = STATE_MAXIMIZED;
-    c->prev_state = STATE_MAXIMIZED;
+    c->state = STATE_NORMAL;
+    c->prev_state = STATE_NORMAL;
     c->width = col_w;
     c->workspace = selmon->workspace;
     {
