@@ -97,7 +97,6 @@ typedef struct {
 static void tile(Monitor *m);
 static void monocle(Monitor *m);
 
-// forward declarations needed by config.h default_keys/default_buttons
 void spawn(const char *arg);
 void killclient(const char *arg);
 void quit(const char *arg);
@@ -118,24 +117,21 @@ void toggletag(const char *arg);
 void movemouse(const char *arg);
 void resizemouse(const char *arg);
 
-#include "config.h"
-
-// runtime config variables (extern for parser.c)
-char norm_bg[64] = NORM_BG;
-char norm_outer_border[64] = NORM_OUTER_BORDER;
-char norm_inner_border[64] = NORM_INNER_BORDER;
-char sel_bg[64] = SEL_BG;
-char sel_outer_border[64] = SEL_OUTER_BORDER;
-char sel_inner_border[64] = SEL_INNER_BORDER;
-char urgent_color[64] = URGENT_COLOR;
-char title_active_bg[64] = TITLE_ACTIVE_BG;
-char title_active_fg[64] = TITLE_ACTIVE_FG;
-char title_inactive_bg[64] = TITLE_INACTIVE_BG;
-char title_inactive_fg[64] = TITLE_INACTIVE_FG;
-int snap_val = SNAP;
-int outer_border_width = OUTER_BORDER_WIDTH;
-int inner_border_width = INNER_BORDER_WIDTH;
-unsigned int default_modkey = MODKEY;
+char norm_bg[64] = "#222222";
+char norm_outer_border[64] = "#ede5d4";
+char norm_inner_border[64] = "#111111";
+char sel_bg[64] = "#111111";
+char sel_outer_border[64] = "#ede5d4";
+char sel_inner_border[64] = "#ffffff";
+char urgent_color[64] = "#ede5d4";
+char title_active_bg[64] = "#111111";
+char title_active_fg[64] = "#ffffff";
+char title_inactive_bg[64] = "#222222";
+char title_inactive_fg[64] = "#ede5d4";
+int snap_val = 32;
+int outer_border_width = 0;
+int inner_border_width = 0;
+unsigned int default_modkey = Mod4Mask;
 
 Key keys[256];
 int nkeys = 0;
@@ -144,6 +140,7 @@ int nbuttons = 0;
 
 #define LENGTH(X) (sizeof X / sizeof X[0])
 #define BUTTONMASK (ButtonPressMask|ButtonReleaseMask)
+#define MOUSEMASK (BUTTONMASK|PointerMotionMask)
 #define CLEANMASK(mask) (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
 #define ISVISIBLE(C) (C->workspace == selmon->workspace)
 
@@ -159,8 +156,16 @@ static volatile sig_atomic_t need_rekey = 0;
 static Cursor cursor_normal;
 static Cursor cursor_move;
 static Cursor cursor_resize;
-int inner_gaps = INNER_GAP;
-int outer_gaps = OUTER_GAP;
+int inner_gaps = 30;
+int outer_gaps = 50;
+int border_width = 0;
+int show_titlebar = 1;
+int show_title = 1;
+int show_buttons = 1;
+int insert_end = 1;
+int strip_align = 2;
+int show_move_indicator = 1;
+char move_indicator_color[64] = "#ede5d4";
 static unsigned int numlockmask = 0;
 
 static unsigned long col_norm_bg;
@@ -353,14 +358,6 @@ static void sigrekey(int sig) {
 }
 
 static void autostart(void) {
-    int i;
-    for (i = 0; i < AUTOSTART_LEN; i++) {
-        if (fork() == 0) {
-            setsid();
-            execlp("/bin/sh", "sh", "-c", autostart_cmds[i], NULL);
-            _exit(1);
-        }
-    }
 }
 
 static Monitor *createmon(int num, int x, int y, int w, int h) {
@@ -684,16 +681,15 @@ static void arrange(Monitor *m) {
     if (col_w < 200) { col_w = 200; actual_inner = inner_gaps; }
 
     int total = get_total_strip_width(m);
-    if (total < m->width) {
-#if STRIP_ALIGN == 0
-        m->scroll_x = 0;
-#elif STRIP_ALIGN == 1
-        m->scroll_x = m->width - total;
-#else
-        m->scroll_x = (m->width - total) / 2;
-#endif
+    if (total < (int)m->width) {
+        if (strip_align == 0)
+            m->scroll_x = 0;
+        else if (strip_align == 1)
+            m->scroll_x = m->width - total;
+        else
+            m->scroll_x = (m->width - total) / 2;
     } else {
-        int max_scroll = -(total - m->width);
+        int max_scroll = -(total - (int)m->width);
         if (max_scroll > 0) max_scroll = 0;
         if (m->scroll_x > 0) m->scroll_x = 0;
         if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
@@ -727,7 +723,7 @@ static void arrange(Monitor *m) {
         Client *c1 = tiled[i];
         int col_x = m->x + outer_gaps + total_width + m->scroll_x;
         int total_col_h = mon_h - 2 * outer_gaps;
-        int title_h = SHOW_TITLEBAR ? TITLE_HEIGHT : 0;
+        int title_h = show_titlebar ? TITLE_HEIGHT : 0;
         if (c1->state == STATE_MAXIMIZED) {
             c1->x = col_x;
             c1->y = mon_y + outer_gaps;
@@ -759,7 +755,7 @@ static void monocle(Monitor *m) {
     if (n > 0)
         for (c = m->clients; c; c = c->next)
             if (ISVISIBLE(c)) {
-                int ch = mon_h - 2 * outer_gaps - (SHOW_TITLEBAR ? TITLE_HEIGHT : 0);
+                int ch = mon_h - 2 * outer_gaps - (show_titlebar ? TITLE_HEIGHT : 0);
                 resize(c, m->x + outer_gaps, mon_y + outer_gaps, m->width - 2 * outer_gaps, ch, 0);
             }
 }
@@ -911,7 +907,7 @@ void ws_down(const char *arg) {
 }
 
 void setgaps(const char *arg) {
-    if (arg[0] == '0') { inner_gaps = INNER_GAP; outer_gaps = OUTER_GAP; }
+    if (arg[0] == '0') { inner_gaps = 30; outer_gaps = 50; }
     else if (arg[0] == '-') { inner_gaps -= 2; outer_gaps -= 2; }
     else if (arg[0] == '+') { inner_gaps += 2; outer_gaps += 2; }
     if (inner_gaps < 0) inner_gaps = 0;
@@ -965,16 +961,15 @@ static void ensure_visible(Client *c) {
     }
 
     int total = get_total_strip_width(m);
-    if (total < m->width) {
-#if STRIP_ALIGN == 0
-        m->scroll_x = 0;
-#elif STRIP_ALIGN == 1
-        m->scroll_x = m->width - total;
-#else
-        m->scroll_x = (m->width - total) / 2;
-#endif
+    if (total < (int)m->width) {
+        if (strip_align == 0)
+            m->scroll_x = 0;
+        else if (strip_align == 1)
+            m->scroll_x = m->width - total;
+        else
+            m->scroll_x = (m->width - total) / 2;
     } else {
-        int max_scroll = -(total - m->width);
+        int max_scroll = -(total - (int)m->width);
         if (m->scroll_x > 0) m->scroll_x = 0;
         if (m->scroll_x < max_scroll) m->scroll_x = max_scroll;
     }
@@ -1015,7 +1010,7 @@ void focusright(const char *arg) {
 }
 
 static void attach(Client *c) {
-    if (INSERT_END) {
+    if (insert_end) {
         Client *last;
         for (last = c->monitor->clients; last && last->next; last = last->next);
         if (last) {
@@ -1066,7 +1061,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     }
     c->monitor = selmon;
     c->mapped = 1;
-    c->border_width = BORDER_WIDTH;
+    c->border_width = border_width;
     updatesizehints(c);
     updatetitle(c);
     updatewindowtype(c);
@@ -1079,7 +1074,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     if (is_transient)
         c->state = STATE_FLOATING;
 
-    if (c->ispanel || is_transient || !SHOW_TITLEBAR) {
+    if (c->ispanel || is_transient || !show_titlebar) {
         c->frame = None;
         XSetWindowBorder(dpy, w, c->border_width > 0 ? c->border_width : 0);
     } else {
@@ -1259,7 +1254,7 @@ void togglefloating(const char *arg) {
         c->height = c->orig_height;
         if (c->width < 100 || c->height < 100) {
             c->width = (selmon->width - 2 * outer_gaps) / 2;
-            c->height = (selmon->height - 2 * outer_gaps) / 2 - (SHOW_TITLEBAR ? TITLE_HEIGHT : 0);
+            c->height = (selmon->height - 2 * outer_gaps) / 2 - (show_titlebar ? TITLE_HEIGHT : 0);
             c->x = selmon->x + (selmon->width - c->width) / 2;
             c->y = selmon->y + (selmon->height - c->height) / 2;
         }
@@ -1272,7 +1267,7 @@ void togglefloating(const char *arg) {
         c->orig_height = c->height;
         c->state = STATE_FLOATING;
         c->width = (selmon->width - 2 * outer_gaps) / 2;
-        c->height = (selmon->height - 2 * outer_gaps) / 2 - (SHOW_TITLEBAR ? TITLE_HEIGHT : 0);
+        c->height = (selmon->height - 2 * outer_gaps) / 2 - (show_titlebar ? TITLE_HEIGHT : 0);
         c->x = selmon->x + (selmon->width - c->width) / 2;
         c->y = selmon->y + (selmon->height - c->height) / 2;
     }
@@ -1421,7 +1416,7 @@ void movemouse(const char *arg) {
     int orig_scroll_x = selmon->scroll_x;
     int dragging = 0;
 
-    if (SHOW_MOVE_INDICATOR && indicator_win != None) {
+    if (show_move_indicator && indicator_win != None) {
         int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
         XMoveResizeWindow(dpy, indicator_win, c->x, c->y, c->width, c->height + title_h);
         XMapWindow(dpy, indicator_win);
@@ -1524,7 +1519,7 @@ void movemouse(const char *arg) {
                     }
                 }
             }
-            if (SHOW_MOVE_INDICATOR && indicator_win != None) {
+            if (show_move_indicator && indicator_win != None) {
                 int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
                 int ix = (c->state == STATE_FLOATING) ? nx : c->x;
                 int iy = (c->state == STATE_FLOATING) ? ny : c->y;
@@ -1535,7 +1530,7 @@ void movemouse(const char *arg) {
         }
     } while (ev.type != ButtonRelease);
 done_move:
-    if (SHOW_MOVE_INDICATOR && indicator_win != None)
+    if (show_move_indicator && indicator_win != None)
         XUnmapWindow(dpy, indicator_win);
     XUngrabPointer(dpy, CurrentTime);
 }
@@ -1628,34 +1623,32 @@ static void drawtitle(Client *c) {
     XSetForeground(dpy, gc, (c == selmon->sel) ? col_title_active_bg : col_title_inactive_bg);
     XFillRectangle(dpy, c->frame, gc, 0, 0, fw, th);
 
-    #if SHOW_TITLE
-    if (c->title[0]) {
+    if (show_title && c->title[0]) {
         XSetForeground(dpy, gc, (c == selmon->sel) ? col_title_active_fg : col_title_inactive_fg);
         int len = strlen(c->title);
         XDrawString(dpy, c->frame, gc, 4, th - 4, c->title, len > 60 ? 60 : len);
     }
-    #endif
 
-    #if SHOW_BUTTONS
-    int bx = fw - BUTTON_SIZE - BUTTON_MARGIN;
-    int by = BUTTON_MARGIN;
-    XSetForeground(dpy, gc, (c == selmon->sel) ? col_title_active_fg : col_title_inactive_fg);
-    XDrawRectangle(dpy, c->frame, gc, bx, by, BUTTON_SIZE, BUTTON_SIZE);
-    XDrawLine(dpy, c->frame, gc, bx+2, by+2, bx+BUTTON_SIZE-3, by+BUTTON_SIZE-3);
-    XDrawLine(dpy, c->frame, gc, bx+2, by+BUTTON_SIZE-3, bx+BUTTON_SIZE-3, by+2);
-    bx = fw - 2*BUTTON_SIZE - 2*BUTTON_MARGIN;
-    XDrawRectangle(dpy, c->frame, gc, bx, by, BUTTON_SIZE, BUTTON_SIZE);
-    XDrawRectangle(dpy, c->frame, gc, bx+2, by+2, BUTTON_SIZE-5, BUTTON_SIZE-5);
-    #endif
+    if (show_buttons) {
+        int bx = fw - BUTTON_SIZE - BUTTON_MARGIN;
+        int by = BUTTON_MARGIN;
+        XSetForeground(dpy, gc, (c == selmon->sel) ? col_title_active_fg : col_title_inactive_fg);
+        XDrawRectangle(dpy, c->frame, gc, bx, by, BUTTON_SIZE, BUTTON_SIZE);
+        XDrawLine(dpy, c->frame, gc, bx+2, by+2, bx+BUTTON_SIZE-3, by+BUTTON_SIZE-3);
+        XDrawLine(dpy, c->frame, gc, bx+2, by+BUTTON_SIZE-3, bx+BUTTON_SIZE-3, by+2);
+        bx = fw - 2*BUTTON_SIZE - 2*BUTTON_MARGIN;
+        XDrawRectangle(dpy, c->frame, gc, bx, by, BUTTON_SIZE, BUTTON_SIZE);
+        XDrawRectangle(dpy, c->frame, gc, bx+2, by+2, BUTTON_SIZE-5, BUTTON_SIZE-5);
+    }
 
-    if (BORDER_WIDTH > 0) {
+    if (border_width > 0) {
         XSetForeground(dpy, gc, (c == selmon->sel) ? col_sel_outer_border : col_norm_outer_border);
         int frame_h = c->height + th;
         int i;
-        for (i = 0; i < OUTER_BORDER_WIDTH; i++)
+        for (i = 0; i < outer_border_width; i++)
             XDrawRectangle(dpy, c->frame, gc, i, i, fw - 2*i - 1, frame_h - 2*i - 1);
         XSetForeground(dpy, gc, (c == selmon->sel) ? col_sel_inner_border : col_norm_inner_border);
-        for (i = OUTER_BORDER_WIDTH; i < BORDER_WIDTH; i++)
+        for (i = outer_border_width; i < border_width; i++)
             XDrawRectangle(dpy, c->frame, gc, i, i, fw - 2*i - 1, frame_h - 2*i - 1);
     }
 }
@@ -1671,21 +1664,21 @@ static void buttonpress(XEvent *e) {
             restack(selmon);
         }
     } else if ((c = frametoclient(ev->window))) {
-        #if SHOW_BUTTONS
-        int fx, fy;
-        Window child;
-        XTranslateCoordinates(dpy, ev->window, c->frame, ev->x, ev->y, &fx, &fy, &child);
-        if (fy >= 0 && fy < TITLE_HEIGHT) {
-            unsigned int fw = c->width;
-            if (fx >= (int)(fw - BUTTON_SIZE - BUTTON_MARGIN) && fx <= (int)(fw - BUTTON_MARGIN)) {
-                killclient(NULL);
-                return;
-            } else if (fx >= (int)(fw - 2*BUTTON_SIZE - 2*BUTTON_MARGIN) && fx <= (int)(fw - BUTTON_SIZE - 2*BUTTON_MARGIN)) {
-                togglemaximize(NULL);
-                return;
+        if (show_buttons) {
+            int fx, fy;
+            Window child;
+            XTranslateCoordinates(dpy, ev->window, c->frame, ev->x, ev->y, &fx, &fy, &child);
+            if (fy >= 0 && fy < TITLE_HEIGHT) {
+                unsigned int fw = c->width;
+                if (fx >= (int)(fw - BUTTON_SIZE - BUTTON_MARGIN) && fx <= (int)(fw - BUTTON_MARGIN)) {
+                    killclient(NULL);
+                    return;
+                } else if (fx >= (int)(fw - 2*BUTTON_SIZE - 2*BUTTON_MARGIN) && fx <= (int)(fw - BUTTON_SIZE - 2*BUTTON_MARGIN)) {
+                    togglemaximize(NULL);
+                    return;
+                }
             }
         }
-        #endif
         XAllowEvents(dpy, ReplayPointer, CurrentTime);
         return;
     } else if (ev->window == root) {
@@ -1933,7 +1926,7 @@ void initcolors(void) {
     XAllocNamedColor(dpy, cmap, title_active_fg, &color, &color);   col_title_active_fg = color.pixel;
     XAllocNamedColor(dpy, cmap, title_inactive_bg, &color, &color); col_title_inactive_bg = color.pixel;
     XAllocNamedColor(dpy, cmap, title_inactive_fg, &color, &color); col_title_inactive_fg = color.pixel;
-    XAllocNamedColor(dpy, cmap, MOVE_INDICATOR_COLOR, &color, &color); col_move_indicator = color.pixel;
+    XAllocNamedColor(dpy, cmap, move_indicator_color, &color, &color); col_move_indicator = color.pixel;
 }
 
 static int ignorewindow(Window w) {
@@ -2035,11 +2028,7 @@ static void updateworkspaces(void) {
 
 static void load_default_config(void) {
     nkeys = 0;
-    for (int i = 0; i < LENGTH(default_keys); i++)
-        keys[nkeys++] = default_keys[i];
     nbuttons = 0;
-    for (int i = 0; i < LENGTH(default_buttons); i++)
-        buttons[nbuttons++] = default_buttons[i];
 }
 
 void reload_config(const char *arg) {

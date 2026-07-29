@@ -28,6 +28,14 @@ extern int outer_gaps;
 extern int snap_val;
 extern int outer_border_width;
 extern int inner_border_width;
+extern int border_width;
+extern int show_titlebar;
+extern int show_title;
+extern int show_buttons;
+extern int insert_end;
+extern int strip_align;
+extern int show_move_indicator;
+extern char move_indicator_color[64];
 extern unsigned int default_modkey;
 
 typedef struct {
@@ -375,6 +383,22 @@ int parse_config(void) {
             outer_border_width = atoi(rest);
             inner_border_width = 0;
         }
+        else if (!strcmp(key, "total_border_width") || !strcmp(key, "border"))
+            border_width = atoi(rest);
+        else if (!strcmp(key, "show_titlebar") || !strcmp(key, "titlebar"))
+            show_titlebar = atoi(rest);
+        else if (!strcmp(key, "show_title"))
+            show_title = atoi(rest);
+        else if (!strcmp(key, "show_buttons"))
+            show_buttons = atoi(rest);
+        else if (!strcmp(key, "insert_end"))
+            insert_end = atoi(rest);
+        else if (!strcmp(key, "strip_align"))
+            strip_align = atoi(rest);
+        else if (!strcmp(key, "show_move_indicator"))
+            show_move_indicator = atoi(rest);
+        else if (!strcmp(key, "move_indicator_color"))
+            strncpy(move_indicator_color, rest, sizeof(move_indicator_color) - 1);
         else if (!strcmp(key, "mod_key") || !strcmp(key, "modkey")) {
             if (!strcmp(rest, "super") || !strcmp(rest, "Super")) default_modkey = Mod4Mask;
             else if (!strcmp(rest, "alt") || !strcmp(rest, "Alt")) default_modkey = Mod1Mask;
