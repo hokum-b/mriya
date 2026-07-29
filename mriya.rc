@@ -1,0 +1,69 @@
+norm_bg : #222222
+norm_outer_border : #ede5d4
+norm_inner_border : #111111
+sel_bg : #111111
+sel_outer_border : #ede5d4
+sel_inner_border : #ffffff
+urgent_color : #ede5d4
+title_active_bg : #111111
+title_active_fg : #ffffff
+title_inactive_bg : #222222
+title_inactive_fg : #ede5d4
+
+inner_gap : 30
+outer_gap : 50
+snap : 32
+outer_border_width : 0
+inner_border_width : 0
+
+mod_key : super
+
+bind : mod + Shift + Return : "alacritty"
+bind : mod + d : "dmenu_run"
+bind : mod + b : "firefox"
+
+call : mod + w : close_window
+call : mod + Shift + q : close_window
+call : mod + Shift + e : quit
+call : mod + Shift + r : restartwm
+call : mod + r : reload_config
+
+call : mod + h : focusleft
+call : mod + j : focusright
+call : mod + k : focusleft
+call : mod + l : focusright
+call : mod + Left : focusleft
+call : mod + Right : focusright
+
+call : mod + Up : ws_up
+call : mod + Down : ws_down
+
+call : mod + Shift + j : dec_gaps
+call : mod + Shift + k : inc_gaps
+call : mod + Control + j : zero_gaps
+
+call : mod + space : zoom
+call : mod + Shift + space : togglefloating
+call : mod + f : togglemaximize
+call : mod + Shift + f : togglefullscreen
+call : mod + Tab : view
+
+workspace : mod + 1 : view 1
+workspace : mod + 2 : view 2
+workspace : mod + 3 : view 3
+workspace : mod + 4 : view 4
+workspace : mod + 5 : view 5
+workspace : mod + 6 : view 6
+workspace : mod + 7 : view 7
+workspace : mod + 8 : view 8
+workspace : mod + 9 : view 9
+
+workspace : mod + Shift + 1 : tag 1
+workspace : mod + Shift + 2 : tag 2
+workspace : mod + Shift + 3 : tag 3
+workspace : mod + Shift + 4 : tag 4
+workspace : mod + Shift + 5 : tag 5
+workspace : mod + Shift + 6 : tag 6
+workspace : mod + Shift + 7 : tag 7
+workspace : mod + Shift + 8 : tag 8
+workspace : mod + Shift + 9 : tag 9
