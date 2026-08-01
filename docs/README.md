@@ -89,10 +89,6 @@ refer to [the website](https://hokum-b.github.io/mriya)
 
 mriya is licensed under the [ISC license](LICENSE)
 
-# note
+# FYI
 
-mriya is **ai free** and will remain **ai free.**
-
-# note note 
-
-on a bit of a development halt.
+if you create a fork of mriya, please do not license it under the gpl.
