@@ -192,289 +192,320 @@ static const char default_config_content[] =
 "workspace : mod + Shift + 8 : tag 8\n"
 "workspace : mod + Shift + 9 : tag 9\n";
 
-static void mkdir_p(const char *path) {
-    char temp[4096];
-    char *p = NULL;
-    size_t len;
-
-    snprintf(temp, sizeof(temp), "%s", path);
-    len = strlen(temp);
-    if (len == 0) return;
-    if (temp[len - 1] == '/') temp[len - 1] = '\0';
-    for (p = temp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            mkdir(temp, 0755);
-            *p = '/';
-        }
-    }
-    mkdir(temp, 0755);
+static void trim(char *buf) {
+    char *end;
+    while (*buf && isspace((unsigned char)*buf)) buf++;
+    if (!*buf) return;
+    end = buf + strlen(buf) - 1;
+    while (end > buf && isspace((unsigned char)*end)) *end-- = '\0';
 }
 
-static void create_file_if_missing(const char *filepath) {
-    if (access(filepath, F_OK) != 0) {
-        char dirpath[4096];
-        snprintf(dirpath, sizeof(dirpath), "%s", filepath);
-        char *last_slash = strrchr(dirpath, '/');
-        if (last_slash) {
-            *last_slash = '\0';
-            mkdir_p(dirpath);
+static void eat_comment(char *buf) {
+    while (*buf && isspace((unsigned char)*buf)) buf++;
+    if (*buf == '#') *buf = '\0';
+}
+
+static void unquote(char *buf) {
+    size_t len = strlen(buf);
+    if (len > 0 && (buf[0] == '"' || buf[0] == '\'')) {
+        memmove(buf, buf + 1, len);
+        len--;
+    }
+    if (len > 0 && (buf[len - 1] == '"' || buf[len - 1] == '\''))
+        buf[len - 1] = '\0';
+}
+
+static void make_parent_dir(const char *path) {
+    char dir[4096];
+    char *slash;
+    snprintf(dir, sizeof(dir), "%s", path);
+    slash = strrchr(dir, '/');
+    if (!slash) return;
+    *slash = '\0';
+    if (*dir) {
+        for (char *p = dir + 1; *p; p++) {
+            if (*p == '/') {
+                *p = '\0';
+                mkdir(dir, 0755);
+                *p = '/';
+            }
         }
-        FILE *f = fopen(filepath, "w");
-        if (f) {
-            fputs(default_config_content, f);
-            fclose(f);
-        }
+        mkdir(dir, 0755);
+    }
+}
+
+static void write_default_config(const char *path) {
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs(default_config_content, f);
+        fclose(f);
+    }
+}
+
+static void seed_file(const char *path) {
+    if (access(path, F_OK) != 0) {
+        make_parent_dir(path);
+        write_default_config(path);
     }
 }
 
 void ensure_config_files_exist(void) {
     const char *home = getenv("HOME");
     const char *xdg = getenv("XDG_CONFIG_HOME");
-    char user_cfg[4096];
+    char path[4096];
 
-    create_file_if_missing("/etc/mriya/mriya.rc");
+    seed_file("/etc/mriya/mriya.rc");
 
     if (xdg && *xdg) {
-        snprintf(user_cfg, sizeof(user_cfg), "%s/mriya/mriya.rc", xdg);
-        create_file_if_missing(user_cfg);
+        snprintf(path, sizeof(path), "%s/mriya/mriya.rc", xdg);
+        seed_file(path);
     } else if (home && *home) {
-        snprintf(user_cfg, sizeof(user_cfg), "%s/.config/mriya/mriya.rc", home);
-        create_file_if_missing(user_cfg);
+        snprintf(path, sizeof(path), "%s/.config/mriya/mriya.rc", home);
+        seed_file(path);
     }
 }
 
-static char *strip(char *s) {
-    while (*s && isspace((unsigned char)*s)) s++;
-    if (!*s) return s;
-    char *e = s + strlen(s) - 1;
-    while (e > s && isspace((unsigned char)*e)) *e-- = '\0';
-    return s;
-}
-
-static char *strip_comment(char *s) {
-    char *p = s;
-    while (*p && isspace((unsigned char)*p)) p++;
-    if (*p == '#')
-        *p = '\0';
-    return s;
-}
-
-static char *strip_quotes(char *s) {
-    size_t len = strlen(s);
-    if (len > 0 && (s[0] == '"' || s[0] == '\'')) {
-        s++;
-        len--;
-    }
-    if (len > 0 && (s[len - 1] == '"' || s[len - 1] == '\''))
-        s[len - 1] = '\0';
-    return s;
-}
-
-static KeySym parse_keysym(const char *key) {
-    KeySym ks = XStringToKeysym(key);
-    if (ks != NoSymbol) return ks;
-    char buf[64];
-    size_t n = strlen(key);
-    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
-    buf[0] = toupper((unsigned char)key[0]);
-    for (size_t i = 1; i < n; i++) buf[i] = tolower((unsigned char)key[i]);
-    buf[n] = '\0';
-    ks = XStringToKeysym(buf);
-    if (ks != NoSymbol) return ks;
-    for (size_t i = 0; i < n; i++) buf[i] = toupper((unsigned char)key[i]);
-    buf[n] = '\0';
-    ks = XStringToKeysym(buf);
-    return ks;
-}
-
-static unsigned int parse_combo(const char *combo, KeySym *out_ks) {
-    unsigned int m = 0;
-    KeySym ks = NoSymbol;
-    char buf[256];
-    strncpy(buf, combo, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    for (char *p = buf; *p; p++) {
-        if (*p == '+' || isspace((unsigned char)*p)) *p = '+';
-    }
-    for (char *tok = strtok(buf, "+"); tok; tok = strtok(NULL, "+")) {
-        if (!strcmp(tok, "mod")) m |= default_modkey;
-        else if (!strcmp(tok, "shift") || !strcmp(tok, "Shift")) m |= ShiftMask;
-        else if (!strcmp(tok, "ctrl") || !strcmp(tok, "Control")) m |= ControlMask;
-        else if (!strcmp(tok, "alt") || !strcmp(tok, "Alt")) m |= Mod1Mask;
-        else if (!strcmp(tok, "super") || !strcmp(tok, "Super")) m |= Mod4Mask;
-        else {
-            ks = parse_keysym(tok);
-        }
-    }
-    *out_ks = ks;
-    return m;
-}
-
-static void add_key(unsigned int mod, KeySym ks, void (*func)(const char *), const char *arg) {
-    if (nkeys >= 256 || ks == NoSymbol || !func) return;
-    keys[nkeys].mod = mod;
-    keys[nkeys].keysym = ks;
-    keys[nkeys].func = func;
-    keys[nkeys].arg = arg;
-    nkeys++;
-}
-
-static FILE *open_config(char *path, size_t pathsz) {
+static FILE *resolve_config(char *buf, size_t size) {
     const char *home = getenv("HOME");
     const char *xdg = getenv("XDG_CONFIG_HOME");
 
     if (xdg && *xdg) {
-        snprintf(path, pathsz, "%s/mriya/mriya.rc", xdg);
-        if (access(path, R_OK) == 0) return fopen(path, "r");
+        snprintf(buf, size, "%s/mriya/mriya.rc", xdg);
+        if (access(buf, R_OK) == 0) return fopen(buf, "r");
     }
     if (home && *home) {
-        snprintf(path, pathsz, "%s/.config/mriya/mriya.rc", home);
-        if (access(path, R_OK) == 0) return fopen(path, "r");
+        snprintf(buf, size, "%s/.config/mriya/mriya.rc", home);
+        if (access(buf, R_OK) == 0) return fopen(buf, "r");
     }
-    snprintf(path, pathsz, "/etc/mriya/mriya.rc");
-    if (access(path, R_OK) == 0) return fopen(path, "r");
-
-    snprintf(path, pathsz, "/etc/mriya.rc");
-    if (access(path, R_OK) == 0) return fopen(path, "r");
-
+    snprintf(buf, size, "/etc/mriya/mriya.rc");
+    if (access(buf, R_OK) == 0) return fopen(buf, "r");
+    snprintf(buf, size, "/etc/mriya.rc");
+    if (access(buf, R_OK) == 0) return fopen(buf, "r");
     return NULL;
+}
+
+static KeySym resolve_keysym(const char *name) {
+    KeySym ks = XStringToKeysym(name);
+    if (ks != NoSymbol) return ks;
+
+    char buf[64];
+    size_t n = strlen(name);
+    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+    buf[0] = toupper((unsigned char)name[0]);
+    for (size_t i = 1; i < n; i++) buf[i] = tolower((unsigned char)name[i]);
+    buf[n] = '\0';
+    ks = XStringToKeysym(buf);
+    if (ks != NoSymbol) return ks;
+    for (size_t i = 0; i < n; i++) buf[i] = toupper((unsigned char)name[i]);
+    buf[n] = '\0';
+    return XStringToKeysym(buf);
+}
+
+static unsigned int decode_modifier(const char *tok) {
+    if (!strcmp(tok, "mod")) return default_modkey;
+    if (!strcmp(tok, "shift")) return ShiftMask;
+    if (!strcmp(tok, "ctrl") || !strcmp(tok, "control")) return ControlMask;
+    if (!strcmp(tok, "alt")) return Mod1Mask;
+    if (!strcmp(tok, "super")) return Mod4Mask;
+    return 0;
+}
+
+static unsigned int parse_chord(const char *chord, KeySym *out_key) {
+    unsigned int mods = 0;
+    KeySym ks = NoSymbol;
+    char buf[256];
+    char *token;
+
+    strncpy(buf, chord, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    for (char *p = buf; *p; p++)
+        if (*p == '+' || isspace((unsigned char)*p)) *p = '+';
+
+    for (token = strtok(buf, "+"); token; token = strtok(NULL, "+")) {
+        unsigned int m = decode_modifier(token);
+        if (m) mods |= m;
+        else ks = resolve_keysym(token);
+    }
+
+    *out_key = ks;
+    return mods;
+}
+
+static void register_key(unsigned int mods, KeySym ks, void (*fn)(const char *), const char *arg) {
+    if (nkeys >= 256 || ks == NoSymbol || !fn) return;
+    keys[nkeys].mod = mods;
+    keys[nkeys].keysym = ks;
+    keys[nkeys].func = fn;
+    keys[nkeys].arg = arg;
+    nkeys++;
+}
+
+static void assign_color(char *target, const char *value) {
+    strncpy(target, value, 63);
+    target[63] = '\0';
+}
+
+static void handle_setting(const char *key, char *value) {
+    if (!strcmp(key, "norm_bg") || !strcmp(key, "normal_bg"))
+        assign_color(norm_bg, value);
+    else if (!strcmp(key, "norm_outer_border") || !strcmp(key, "unfocused_border_colour"))
+        assign_color(norm_outer_border, value);
+    else if (!strcmp(key, "norm_inner_border"))
+        assign_color(norm_inner_border, value);
+    else if (!strcmp(key, "sel_bg") || !strcmp(key, "focused_bg"))
+        assign_color(sel_bg, value);
+    else if (!strcmp(key, "sel_outer_border") || !strcmp(key, "focused_border_colour"))
+        assign_color(sel_outer_border, value);
+    else if (!strcmp(key, "sel_inner_border"))
+        assign_color(sel_inner_border, value);
+    else if (!strcmp(key, "urgent_color") || !strcmp(key, "urgent_colour"))
+        assign_color(urgent_color, value);
+    else if (!strcmp(key, "title_active_bg"))
+        assign_color(title_active_bg, value);
+    else if (!strcmp(key, "title_active_fg"))
+        assign_color(title_active_fg, value);
+    else if (!strcmp(key, "title_inactive_bg"))
+        assign_color(title_inactive_bg, value);
+    else if (!strcmp(key, "title_inactive_fg"))
+        assign_color(title_inactive_fg, value);
+    else if (!strcmp(key, "inner_gap") || !strcmp(key, "gaps"))
+        inner_gaps = atoi(value);
+    else if (!strcmp(key, "outer_gap") || !strcmp(key, "outer_gaps"))
+        outer_gaps = atoi(value);
+    else if (!strcmp(key, "snap") || !strcmp(key, "snap_distance"))
+        snap_val = atoi(value);
+    else if (!strcmp(key, "outer_border_width"))
+        outer_border_width = atoi(value);
+    else if (!strcmp(key, "inner_border_width"))
+        inner_border_width = atoi(value);
+    else if (!strcmp(key, "border_width")) {
+        outer_border_width = atoi(value);
+        inner_border_width = 0;
+    }
+    else if (!strcmp(key, "total_border_width") || !strcmp(key, "border"))
+        border_width = atoi(value);
+    else if (!strcmp(key, "show_titlebar") || !strcmp(key, "titlebar"))
+        show_titlebar = atoi(value);
+    else if (!strcmp(key, "show_title"))
+        show_title = atoi(value);
+    else if (!strcmp(key, "show_buttons"))
+        show_buttons = atoi(value);
+    else if (!strcmp(key, "insert_end"))
+        insert_end = atoi(value);
+    else if (!strcmp(key, "strip_align"))
+        strip_align = atoi(value);
+    else if (!strcmp(key, "show_move_indicator"))
+        show_move_indicator = atoi(value);
+    else if (!strcmp(key, "move_indicator_color"))
+        assign_color(move_indicator_color, value);
+    else if (!strcmp(key, "mod_key") || !strcmp(key, "modkey")) {
+        if (!strcmp(value, "super")) default_modkey = Mod4Mask;
+        else if (!strcmp(value, "alt")) default_modkey = Mod1Mask;
+        else if (!strcmp(value, "ctrl") || !strcmp(value, "control")) default_modkey = ControlMask;
+        else if (!strcmp(value, "shift")) default_modkey = ShiftMask;
+    }
+}
+
+static void handle_autostart(char *value) {
+    unquote(value);
+    if (*value && nautostart < 256)
+        autostart_cmds[nautostart++] = strdup(value);
+}
+
+static void handle_bind(char *value) {
+    char *sep = strchr(value, ':');
+    KeySym ks;
+    unsigned int mods;
+    if (!sep) return;
+    *sep = '\0';
+    mods = parse_chord(value, &ks);
+    trim(sep + 1);
+    unquote(sep + 1);
+    if (ks != NoSymbol && *(sep + 1))
+        register_key(mods, ks, spawn, strdup(sep + 1));
+}
+
+static void handle_call(char *value) {
+    char *sep = strchr(value, ':');
+    KeySym ks;
+    unsigned int mods;
+    if (!sep) return;
+    *sep = '\0';
+    mods = parse_chord(value, &ks);
+    trim(sep + 1);
+    if (ks != NoSymbol) {
+        for (int i = 0; func_table[i].name; i++) {
+            if (!strcmp(sep + 1, func_table[i].name)) {
+                register_key(mods, ks, func_table[i].func, func_table[i].arg);
+                break;
+            }
+        }
+    }
+}
+
+static void handle_workspace(char *value) {
+    char *sep = strchr(value, ':');
+    KeySym ks;
+    unsigned int mods;
+    char action[64];
+    int num;
+    if (!sep) return;
+    *sep = '\0';
+    mods = parse_chord(value, &ks);
+    trim(sep + 1);
+    if (ks == NoSymbol) return;
+    if (sscanf(sep + 1, "%63s %d", action, &num) == 2 && num >= 1 && num <= 9) {
+        const char *ws_arg = ws_args[num - 1];
+        if (!strcmp(action, "view") || !strcmp(action, "move"))
+            register_key(mods, ks, view, ws_arg);
+        else if (!strcmp(action, "tag") || !strcmp(action, "swap"))
+            register_key(mods, ks, tag, ws_arg);
+        else if (!strcmp(action, "toggleview"))
+            register_key(mods, ks, toggleview, ws_arg);
+        else if (!strcmp(action, "toggletag"))
+            register_key(mods, ks, toggletag, ws_arg);
+    }
 }
 
 int parse_config(void) {
     char path[4096];
+    char line[512];
+    FILE *f;
+
     ensure_config_files_exist();
-    FILE *f = open_config(path, sizeof(path));
+    f = resolve_config(path, sizeof(path));
     if (!f) return -1;
 
     nkeys = 0;
     nautostart = 0;
-    char line[512];
+
     while (fgets(line, sizeof(line), f)) {
-        char *s = strip_comment(strip(line));
+        char *s = line;
+        char *sep;
+
+        trim(s);
+        eat_comment(s);
         if (!*s) continue;
 
-        char *sep = strchr(s, ':');
+        sep = strchr(s, ':');
         if (!sep) continue;
         *sep = '\0';
-        char *key = strip(s);
-        char *rest = strip(sep + 1);
 
-        if (!strcmp(key, "norm_bg") || !strcmp(key, "normal_bg"))
-            strncpy(norm_bg, rest, sizeof(norm_bg) - 1);
-        else if (!strcmp(key, "norm_outer_border") || !strcmp(key, "unfocused_border_colour"))
-            strncpy(norm_outer_border, rest, sizeof(norm_outer_border) - 1);
-        else if (!strcmp(key, "norm_inner_border"))
-            strncpy(norm_inner_border, rest, sizeof(norm_inner_border) - 1);
-        else if (!strcmp(key, "sel_bg") || !strcmp(key, "focused_bg"))
-            strncpy(sel_bg, rest, sizeof(sel_bg) - 1);
-        else if (!strcmp(key, "sel_outer_border") || !strcmp(key, "focused_border_colour"))
-            strncpy(sel_outer_border, rest, sizeof(sel_outer_border) - 1);
-        else if (!strcmp(key, "sel_inner_border"))
-            strncpy(sel_inner_border, rest, sizeof(sel_inner_border) - 1);
-        else if (!strcmp(key, "urgent_color") || !strcmp(key, "urgent_colour"))
-            strncpy(urgent_color, rest, sizeof(urgent_color) - 1);
-        else if (!strcmp(key, "title_active_bg"))
-            strncpy(title_active_bg, rest, sizeof(title_active_bg) - 1);
-        else if (!strcmp(key, "title_active_fg"))
-            strncpy(title_active_fg, rest, sizeof(title_active_fg) - 1);
-        else if (!strcmp(key, "title_inactive_bg"))
-            strncpy(title_inactive_bg, rest, sizeof(title_inactive_bg) - 1);
-        else if (!strcmp(key, "title_inactive_fg"))
-            strncpy(title_inactive_fg, rest, sizeof(title_inactive_fg) - 1);
-        else if (!strcmp(key, "inner_gap") || !strcmp(key, "gaps"))
-            inner_gaps = atoi(rest);
-        else if (!strcmp(key, "outer_gap") || !strcmp(key, "outer_gaps"))
-            outer_gaps = atoi(rest);
-        else if (!strcmp(key, "snap") || !strcmp(key, "snap_distance"))
-            snap_val = atoi(rest);
-        else if (!strcmp(key, "outer_border_width"))
-            outer_border_width = atoi(rest);
-        else if (!strcmp(key, "inner_border_width"))
-            inner_border_width = atoi(rest);
-        else if (!strcmp(key, "border_width")) {
-            outer_border_width = atoi(rest);
-            inner_border_width = 0;
-        }
-        else if (!strcmp(key, "total_border_width") || !strcmp(key, "border"))
-            border_width = atoi(rest);
-        else if (!strcmp(key, "show_titlebar") || !strcmp(key, "titlebar"))
-            show_titlebar = atoi(rest);
-        else if (!strcmp(key, "show_title"))
-            show_title = atoi(rest);
-        else if (!strcmp(key, "show_buttons"))
-            show_buttons = atoi(rest);
-        else if (!strcmp(key, "insert_end"))
-            insert_end = atoi(rest);
-        else if (!strcmp(key, "strip_align"))
-            strip_align = atoi(rest);
-        else if (!strcmp(key, "show_move_indicator"))
-            show_move_indicator = atoi(rest);
-        else if (!strcmp(key, "move_indicator_color"))
-            strncpy(move_indicator_color, rest, sizeof(move_indicator_color) - 1);
-        else if (!strcmp(key, "mod_key") || !strcmp(key, "modkey")) {
-            if (!strcmp(rest, "super") || !strcmp(rest, "Super")) default_modkey = Mod4Mask;
-            else if (!strcmp(rest, "alt") || !strcmp(rest, "Alt")) default_modkey = Mod1Mask;
-            else if (!strcmp(rest, "ctrl") || !strcmp(rest, "Control")) default_modkey = ControlMask;
-            else if (!strcmp(rest, "shift") || !strcmp(rest, "Shift")) default_modkey = ShiftMask;
-        }
-        else if (!strcmp(key, "autostart")) {
-            char *cmd = strip_quotes(strip(rest));
-            if (*cmd && nautostart < 256)
-                autostart_cmds[nautostart++] = strdup(cmd);
-        }
-        else if (!strcmp(key, "bind")) {
-            char *mid = strchr(rest, ':');
-            if (!mid) continue;
-            *mid = '\0';
-            char *combo = strip(rest);
-            char *cmd = strip_quotes(strip(mid + 1));
-            KeySym ks;
-            unsigned int mods = parse_combo(combo, &ks);
-            if (ks != NoSymbol && *cmd) {
-                add_key(mods, ks, spawn, strdup(cmd));
-            }
-        }
-        else if (!strcmp(key, "call")) {
-            char *mid = strchr(rest, ':');
-            if (!mid) continue;
-            *mid = '\0';
-            char *combo = strip(rest);
-            char *fn_name = strip(mid + 1);
-            KeySym ks;
-            unsigned int mods = parse_combo(combo, &ks);
-            if (ks != NoSymbol) {
-                for (int i = 0; func_table[i].name; i++) {
-                    if (!strcmp(fn_name, func_table[i].name)) {
-                        add_key(mods, ks, func_table[i].func, func_table[i].arg);
-                        break;
-                    }
-                }
-            }
-        }
-        else if (!strcmp(key, "workspace")) {
-            char *mid = strchr(rest, ':');
-            if (!mid) continue;
-            *mid = '\0';
-            char *combo = strip(rest);
-            char *act = strip(mid + 1);
-            KeySym ks;
-            unsigned int mods = parse_combo(combo, &ks);
-            if (ks != NoSymbol) {
-                char act_type[64];
-                int ws_num = 0;
-                if (sscanf(act, "%s %d", act_type, &ws_num) == 2 && ws_num >= 1 && ws_num <= 9) {
-                    const char *ws_arg = ws_args[ws_num - 1];
-                    if (!strcmp(act_type, "view") || !strcmp(act_type, "move"))
-                        add_key(mods, ks, view, ws_arg);
-                    else if (!strcmp(act_type, "tag") || !strcmp(act_type, "swap"))
-                        add_key(mods, ks, tag, ws_arg);
-                    else if (!strcmp(act_type, "toggleview"))
-                        add_key(mods, ks, toggleview, ws_arg);
-                    else if (!strcmp(act_type, "toggletag"))
-                        add_key(mods, ks, toggletag, ws_arg);
-                }
-            }
+        char *key = s;
+        char *value = sep + 1;
+        trim(key);
+        trim(value);
+
+        if (!strcmp(key, "autostart")) {
+            handle_autostart(value);
+        } else if (!strcmp(key, "bind")) {
+            handle_bind(value);
+        } else if (!strcmp(key, "call")) {
+            handle_call(value);
+        } else if (!strcmp(key, "workspace")) {
+            handle_workspace(value);
+        } else {
+            handle_setting(key, value);
         }
     }
 
