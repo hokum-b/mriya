@@ -48,6 +48,9 @@ typedef struct {
 extern Key keys[256];
 extern int nkeys;
 
+extern char *autostart_cmds[256];
+extern int nautostart;
+
 extern void killclient(const char *arg);
 extern void quit(const char *arg);
 extern void restartwm(const char *arg);
@@ -130,7 +133,14 @@ static const char default_config_content[] =
 "outer_border_width : 0\n"
 "inner_border_width : 0\n"
 "\n"
+"show_titlebar : 1\n"
+"show_title : 1\n"
+"show_buttons : 1\n"
+"\n"
 "mod_key : super\n"
+"\n"
+"autostart : \"alacritty\"\n"
+"autostart : \"dmenu_run\"\n"
 "\n"
 "bind : mod + Shift + Return : \"alacritty\"\n"
 "bind : mod + d : \"dmenu_run\"\n"
@@ -243,9 +253,11 @@ static char *strip(char *s) {
 }
 
 static char *strip_comment(char *s) {
-    char *c = strchr(s, '#');
-    if (c) *c = '\0';
-    return strip(s);
+    char *p = s;
+    while (*p && isspace((unsigned char)*p)) p++;
+    if (*p == '#')
+        *p = '\0';
+    return s;
 }
 
 static char *strip_quotes(char *s) {
@@ -336,6 +348,7 @@ int parse_config(void) {
     if (!f) return -1;
 
     nkeys = 0;
+    nautostart = 0;
     char line[512];
     while (fgets(line, sizeof(line), f)) {
         char *s = strip_comment(strip(line));
@@ -404,6 +417,11 @@ int parse_config(void) {
             else if (!strcmp(rest, "alt") || !strcmp(rest, "Alt")) default_modkey = Mod1Mask;
             else if (!strcmp(rest, "ctrl") || !strcmp(rest, "Control")) default_modkey = ControlMask;
             else if (!strcmp(rest, "shift") || !strcmp(rest, "Shift")) default_modkey = ShiftMask;
+        }
+        else if (!strcmp(key, "autostart")) {
+            char *cmd = strip_quotes(strip(rest));
+            if (*cmd && nautostart < 256)
+                autostart_cmds[nautostart++] = strdup(cmd);
         }
         else if (!strcmp(key, "bind")) {
             char *mid = strchr(rest, ':');

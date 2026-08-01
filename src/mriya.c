@@ -40,6 +40,7 @@ typedef struct Client {
     int mapped;
     int urgent;
     int ispanel;
+    int is_transient;
     struct Client *next;
     struct Client *prev;
     struct Client *next_stack;
@@ -135,6 +136,8 @@ unsigned int default_modkey = Mod4Mask;
 
 Key keys[256];
 int nkeys = 0;
+char *autostart_cmds[256];
+int nautostart = 0;
 Button buttons[256];
 int nbuttons = 0;
 
@@ -214,6 +217,8 @@ static void destroynotify(XEvent *e);
 static void die(const char *fmt, ...);
 static void drawbar(Monitor *m);
 static void drawtitle(Client *c);
+static void reframe(Client *c);
+static void updateframes(void);
 static void enternotify(XEvent *e);
 static void expose(XEvent *e);
 static void focus(Client *c);
@@ -358,6 +363,10 @@ static void sigrekey(int sig) {
 }
 
 static void autostart(void) {
+    int i;
+    for (i = 0; i < nautostart; i++)
+        if (autostart_cmds[i])
+            spawn(autostart_cmds[i]);
 }
 
 static Monitor *createmon(int num, int x, int y, int w, int h) {
@@ -1071,6 +1080,7 @@ static void manage(Window w, XWindowAttributes *wa) {
     grabbuttons(c, 0);
 
     int is_transient = (XGetTransientForHint(dpy, w, &trans) && trans != None);
+    c->is_transient = is_transient;
     if (is_transient)
         c->state = STATE_FLOATING;
 
@@ -1115,6 +1125,42 @@ static void manage(Window w, XWindowAttributes *wa) {
     }
     restack(selmon);
     updateworkspaces();
+}
+
+static void reframe(Client *c) {
+    int want = show_titlebar && !c->ispanel && !c->is_transient;
+    if (want && !c->frame) {
+        XWindowChanges wc;
+        XSetWindowAttributes frame_attr;
+        frame_attr.override_redirect = True;
+        frame_attr.background_pixel = 0;
+        frame_attr.event_mask = ButtonPressMask | ExposureMask;
+        c->frame = XCreateWindow(dpy, root, c->x, c->y, c->width, c->height + TITLE_HEIGHT, 0,
+                                 CopyFromParent, InputOutput, CopyFromParent,
+                                 CWOverrideRedirect | CWBackPixel | CWEventMask, &frame_attr);
+        XSelectInput(dpy, c->frame, ButtonPressMask | ExposureMask);
+        XReparentWindow(dpy, c->window, c->frame, 0, TITLE_HEIGHT);
+        wc.border_width = 0;
+        XConfigureWindow(dpy, c->window, CWBorderWidth, &wc);
+        c->border_width = 0;
+        XMapWindow(dpy, c->frame);
+        drawtitle(c);
+    } else if (!want && c->frame) {
+        XSetErrorHandler(xerrordummy);
+        XReparentWindow(dpy, c->window, root, c->x, c->y + TITLE_HEIGHT);
+        XDestroyWindow(dpy, c->frame);
+        c->frame = None;
+        XSetWindowBorder(dpy, c->window, c->border_width > 0 ? c->border_width : 0);
+        XSetErrorHandler(xerror);
+    }
+}
+
+static void updateframes(void) {
+    Monitor *m;
+    Client *c;
+    for (m = mons; m; m = m->next)
+        for (c = m->clients; c; c = c->next)
+            reframe(c);
 }
 
 static void unmanage(Client *c, int destroyed) {
@@ -2041,6 +2087,7 @@ void reload_config(const char *arg) {
     }
     initcolors();
     grabkeys();
+    updateframes();
     arrange(selmon);
 }
 

@@ -15,8 +15,21 @@ outer_gap : 50
 snap : 32
 outer_border_width : 0
 inner_border_width : 0
+# border_width : 0
+# total_border_width : 0
+# insert_end : 1
+# strip_align : 0
+# show_move_indicator : 1
+# move_indicator_color : #ede5d4
+
+show_titlebar : 1
+show_title : 1
+show_buttons : 1
 
 mod_key : super
+
+# autostart : "alacritty"
+# autostart : "dmenu_run"
 
 bind : mod + Shift + Return : "alacritty"
 bind : mod + d : "dmenu_run"
