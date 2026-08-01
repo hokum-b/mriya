@@ -81,8 +81,9 @@ refer to [the website](https://hokum-b.github.io/mriya)
 # 1.0 release goals
 
 - [x] stable with little to no crashes.
-- [ ] hot reloads
+- [x] hot reloads
 - [ ] plenty of other qol features
+- [ ] static binary and install
 
 # license
 
