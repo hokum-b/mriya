@@ -91,3 +91,7 @@ mriya is licensed under the [ISC license](LICENSE)
 # note
 
 mriya is **ai free** and will remain **ai free.**
+
+# note note 
+
+on a bit of a development halt.
