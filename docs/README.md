@@ -2,7 +2,7 @@
 
 is a scrolling x11 window manager.
 
-![License](https://img.shields.io/badge/license-ISC-blue.svg)
+![License](https://img.shields.io/badge/license-BSD3-blue.svg)
 
 <p align="center">
   <img src="/assets/img.png" alt="img" width="700">
