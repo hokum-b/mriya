@@ -2,7 +2,7 @@
 
 is a scrolling x11 window manager.
 
-![License](https://img.shields.io/badge/license-BSD3-blue.svg)
+![License](https://img.shields.io/badge/license-BSD3C-blue.svg)
 
 <p align="center">
   <img src="/assets/img.png" alt="img" width="700">
@@ -21,16 +21,6 @@ mriya is heavily inspired by [niri](https://github.com/niri-wm/niri) and [i3](ht
 - [netbsd](https://www.netbsd.org/) 10.1 x86_64
 - [openindiana](https://www.openindiana.org) hipster 2026.04 x86_64
 
-## compile
-
-```bash
-git clone https://github.com/hokum-b/mriya
-cd mriya/
-make
-```
-
-(the binary is produced at `./mriya`.)
-
 ### deps
 
 - libX11-devel (xlib)
@@ -47,13 +37,9 @@ sudo make install
 
 this copies `mriya` to `/usr/local/bin/mriya`.
 
-or you can `sudo cp mriya` to `/usr/local/bin`
-
 ### run 
 
-```startx ./mriya```
-
-or ```startx ./mriya``` (refer to the install section above.)
+```startx mriya```
 
 ### set-up with display managers
 
@@ -72,7 +58,10 @@ DesktopNames=mriya
 ### notes
 
 - some distros don't have `/usr/local/bin` in `$PATH` by default.
-- recompilation is required after editing `src/config.h`.
+
+### configure
+
+edit ```/$HOME/.config/mriya/mriya.rc
 
 # detailed documentation
 
