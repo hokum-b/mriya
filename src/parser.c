@@ -193,9 +193,10 @@ static const char default_config_content[] =
 "workspace : mod + Shift + 9 : tag 9\n";
 
 static void trim(char *buf) {
+    char *start = buf;
     char *end;
-    while (*buf && isspace((unsigned char)*buf)) buf++;
-    if (!*buf) return;
+    while (*start && isspace((unsigned char)*start)) start++;
+    if (start != buf) memmove(buf, start, strlen(start) + 1);
     end = buf + strlen(buf) - 1;
     while (end > buf && isspace((unsigned char)*end)) *end-- = '\0';
 }
@@ -302,11 +303,19 @@ static KeySym resolve_keysym(const char *name) {
 }
 
 static unsigned int decode_modifier(const char *tok) {
-    if (!strcmp(tok, "mod")) return default_modkey;
-    if (!strcmp(tok, "shift")) return ShiftMask;
-    if (!strcmp(tok, "ctrl") || !strcmp(tok, "control")) return ControlMask;
-    if (!strcmp(tok, "alt")) return Mod1Mask;
-    if (!strcmp(tok, "super")) return Mod4Mask;
+    char buf[32];
+    size_t n;
+    if (!tok) return 0;
+    n = strlen(tok);
+    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+    for (size_t i = 0; i < n; i++)
+        buf[i] = tolower((unsigned char)tok[i]);
+    buf[n] = '\0';
+    if (!strcmp(buf, "mod")) return default_modkey;
+    if (!strcmp(buf, "shift")) return ShiftMask;
+    if (!strcmp(buf, "ctrl") || !strcmp(buf, "control")) return ControlMask;
+    if (!strcmp(buf, "alt")) return Mod1Mask;
+    if (!strcmp(buf, "super")) return Mod4Mask;
     return 0;
 }
 
