@@ -61,7 +61,7 @@ DesktopNames=mriya
 
 # configure
 
-edit ```/$HOME/.config/mriya/mriya.rc
+edit ```/$HOME/.config/mriya/mriya.rc```
 
 # detailed documentation
 
