@@ -1293,19 +1293,7 @@ void togglefloating(const char *arg) {
     Client *c = selmon->sel;
     if (!c) return;
     if (c->state == STATE_FULLSCREEN) setfullscreen(c, 0);
-    if (c->state == STATE_MAXIMIZED) {
-        c->state = STATE_FLOATING;
-        c->x = c->orig_x;
-        c->y = c->orig_y;
-        c->width = c->orig_width;
-        c->height = c->orig_height;
-        if (c->width < 100 || c->height < 100) {
-            c->width = (selmon->width - 2 * outer_gaps) / 2;
-            c->height = (selmon->height - 2 * outer_gaps) / 2 - (show_titlebar ? TITLE_HEIGHT : 0);
-            c->x = selmon->x + (selmon->width - c->width) / 2;
-            c->y = selmon->y + (selmon->height - c->height) / 2;
-        }
-    } else if (c->state == STATE_FLOATING) {
+    if (c->state == STATE_FLOATING) {
         c->state = STATE_NORMAL;
     } else {
         c->orig_x = c->x;
@@ -1313,8 +1301,10 @@ void togglefloating(const char *arg) {
         c->orig_width = c->width;
         c->orig_height = c->height;
         c->state = STATE_FLOATING;
-        c->width = (selmon->width - 2 * outer_gaps) / 2;
-        c->height = (selmon->height - 2 * outer_gaps) / 2 - (show_titlebar ? TITLE_HEIGHT : 0);
+        if (c->width < 100 || c->height < 100) {
+            c->width = (selmon->width - 2 * outer_gaps) / 2;
+            c->height = (selmon->height - 2 * outer_gaps) / 2 - (show_titlebar ? TITLE_HEIGHT : 0);
+        }
         c->x = selmon->x + (selmon->width - c->width) / 2;
         c->y = selmon->y + (selmon->height - c->height) / 2;
     }
@@ -1624,6 +1614,12 @@ void resizemouse(const char *arg) {
                     nh = selmon->y + selmon->height - outer_gaps - c->y;
                 resize(c, c->x, c->y, nw, nh, 1);
             } else {
+                if (c->state != STATE_MAXIMIZED) {
+                    c->orig_x = c->x;
+                    c->orig_y = c->y;
+                    c->orig_width = c->width;
+                    c->orig_height = c->height;
+                }
                 c->state = STATE_MAXIMIZED;
                 c->width = nw;
                 c->height = nh;
@@ -1711,6 +1707,10 @@ static void buttonpress(XEvent *e) {
             restack(selmon);
         }
     } else if ((c = frametoclient(ev->window))) {
+        if (!c->ispanel) {
+            focus(c);
+            restack(selmon);
+        }
         if (show_buttons) {
             int fx, fy;
             Window child;
@@ -1726,8 +1726,6 @@ static void buttonpress(XEvent *e) {
                 }
             }
         }
-        XAllowEvents(dpy, ReplayPointer, CurrentTime);
-        return;
     } else if (ev->window == root) {
         Window child;
         int rx, ry, cx, cy;
@@ -2080,14 +2078,30 @@ static void load_default_config(void) {
 
 void reload_config(const char *arg) {
     Key saved_keys[256];
+    Button saved_buttons[256];
     int saved_nkeys = nkeys;
+    int saved_nbuttons = nbuttons;
     memcpy(saved_keys, keys, sizeof(Key) * nkeys);
+    memcpy(saved_buttons, buttons, sizeof(Button) * nbuttons);
     if (parse_config() != 0) {
         nkeys = saved_nkeys;
         memcpy(keys, saved_keys, sizeof(Key) * saved_nkeys);
+        nbuttons = saved_nbuttons;
+        memcpy(buttons, saved_buttons, sizeof(Button) * saved_nbuttons);
     }
     initcolors();
     grabkeys();
+    XUngrabButton(dpy, AnyButton, AnyModifier, root);
+    {
+        unsigned int i, j;
+        unsigned int modifiers[] = { 0, LockMask, numlockmask, numlockmask|LockMask };
+        for (i = 0; i < nbuttons; i++)
+            for (j = 0; j < LENGTH(modifiers); j++)
+                XGrabButton(dpy, buttons[i].button,
+                    buttons[i].mod | modifiers[j],
+                    root, True, ButtonPressMask,
+                    GrabModeAsync, GrabModeAsync, None, None);
+    }
     {
         XFontStruct *nf = XLoadQueryFont(dpy, title_font);
         if (nf) {

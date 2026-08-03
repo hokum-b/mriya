@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -49,6 +50,16 @@ typedef struct {
 extern Key keys[256];
 extern int nkeys;
 
+typedef struct {
+    unsigned int mod;
+    unsigned int button;
+    void (*func)(const char *arg);
+    const char *arg;
+} Button;
+
+extern Button buttons[256];
+extern int nbuttons;
+
 extern char *autostart_cmds[256];
 extern int nautostart;
 
@@ -70,6 +81,8 @@ extern void toggleview(const char *arg);
 extern void tag(const char *arg);
 extern void toggletag(const char *arg);
 extern void spawn(const char *arg);
+extern void movemouse(const char *arg);
+extern void resizemouse(const char *arg);
 
 typedef struct {
     const char *name;
@@ -110,6 +123,10 @@ static const FuncMap func_table[] = {
     {"toggleview", toggleview, NULL},
     {"tag", tag, NULL},
     {"toggletag", toggletag, NULL},
+    {"movemouse", movemouse, NULL},
+    {"mousemove", movemouse, NULL},
+    {"resizemouse", resizemouse, NULL},
+    {"mouseresize", resizemouse, NULL},
     {NULL, NULL, NULL}
 };
 
@@ -173,6 +190,9 @@ static const char default_config_content[] =
 "call : mod + f : togglemaximize\n"
 "call : mod + Shift + f : togglefullscreen\n"
 "call : mod + Tab : view\n"
+"\n"
+"mousebind : mod + Button1 : movemouse\n"
+"mousebind : mod + Button3 : resizemouse\n"
 "\n"
 "workspace : mod + 1 : view 1\n"
 "workspace : mod + 2 : view 2\n"
@@ -351,6 +371,41 @@ static void register_key(unsigned int mods, KeySym ks, void (*fn)(const char *),
     nkeys++;
 }
 
+static void register_button(unsigned int mods, unsigned int button, void (*fn)(const char *), const char *arg) {
+    if (nbuttons >= 256 || button == 0 || !fn) return;
+    buttons[nbuttons].mod = mods;
+    buttons[nbuttons].button = button;
+    buttons[nbuttons].func = fn;
+    buttons[nbuttons].arg = arg;
+    nbuttons++;
+}
+
+static unsigned int parse_button_chord(const char *chord, unsigned int *out_button) {
+    unsigned int mods = 0;
+    unsigned int button = 0;
+    char buf[256];
+    char *token;
+
+    *out_button = 0;
+    strncpy(buf, chord, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    for (char *p = buf; *p; p++)
+        if (*p == '+' || isspace((unsigned char)*p)) *p = '+';
+
+    for (token = strtok(buf, "+"); token; token = strtok(NULL, "+")) {
+        unsigned int m = decode_modifier(token);
+        if (m) mods |= m;
+        else if (!strcasecmp(token, "button1") || !strcasecmp(token, "lmb")) button = Button1;
+        else if (!strcasecmp(token, "button2") || !strcasecmp(token, "mmb")) button = Button2;
+        else if (!strcasecmp(token, "button3") || !strcasecmp(token, "rmb")) button = Button3;
+        else if (!strcasecmp(token, "button4") || !strcasecmp(token, "scrollup")) button = Button4;
+        else if (!strcasecmp(token, "button5") || !strcasecmp(token, "scrolldown")) button = Button5;
+    }
+
+    *out_button = button;
+    return mods;
+}
+
 static void assign_color(char *target, const char *value) {
     strncpy(target, value, 63);
     target[63] = '\0';
@@ -456,6 +511,24 @@ static void handle_call(char *value) {
     }
 }
 
+static void handle_mousebind(char *value) {
+    char *sep = strchr(value, ':');
+    unsigned int mods;
+    unsigned int button;
+    if (!sep) return;
+    *sep = '\0';
+    mods = parse_button_chord(value, &button);
+    trim(sep + 1);
+    if (button != 0) {
+        for (int i = 0; func_table[i].name; i++) {
+            if (!strcmp(sep + 1, func_table[i].name)) {
+                register_button(mods, button, func_table[i].func, func_table[i].arg);
+                break;
+            }
+        }
+    }
+}
+
 static void handle_workspace(char *value) {
     char *sep = strchr(value, ':');
     KeySym ks;
@@ -517,6 +590,8 @@ int parse_config(void) {
             handle_call(value);
         } else if (!strcmp(key, "workspace")) {
             handle_workspace(value);
+        } else if (!strcmp(key, "mousebind") || !strcmp(key, "mouse")) {
+            handle_mousebind(value);
         } else {
             handle_setting(key, value);
         }
