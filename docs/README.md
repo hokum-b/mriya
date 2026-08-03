@@ -71,7 +71,7 @@ refer to [the website](https://hokum-b.github.io/mriya)
 
 - [x] stable with little to no crashes.
 - [x] hot reloads
-- [ ] proper documentation
+- [x] proper documentation
 
 # license
 
