@@ -22,6 +22,7 @@ extern char title_active_bg[64];
 extern char title_active_fg[64];
 extern char title_inactive_bg[64];
 extern char title_inactive_fg[64];
+extern char title_font[64];
 
 extern int inner_gaps;
 extern int outer_gaps;
@@ -126,6 +127,7 @@ static const char default_config_content[] =
 "title_active_fg : #ffffff\n"
 "title_inactive_bg : #222222\n"
 "title_inactive_fg : #ede5d4\n"
+"title_font : fixed\n"
 "\n"
 "inner_gap : 30\n"
 "outer_gap : 50\n"
@@ -377,6 +379,8 @@ static void handle_setting(const char *key, char *value) {
         assign_color(title_inactive_bg, value);
     else if (!strcmp(key, "title_inactive_fg"))
         assign_color(title_inactive_fg, value);
+    else if (!strcmp(key, "title_font"))
+        assign_color(title_font, value);
     else if (!strcmp(key, "inner_gap") || !strcmp(key, "gaps"))
         inner_gaps = atoi(value);
     else if (!strcmp(key, "outer_gap") || !strcmp(key, "outer_gaps"))

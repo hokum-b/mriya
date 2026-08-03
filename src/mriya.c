@@ -129,6 +129,7 @@ char title_active_bg[64] = "#111111";
 char title_active_fg[64] = "#ffffff";
 char title_inactive_bg[64] = "#222222";
 char title_inactive_fg[64] = "#ede5d4";
+char title_font[64] = "fixed";
 int snap_val = 32;
 int outer_border_width = 0;
 int inner_border_width = 0;
@@ -2087,6 +2088,14 @@ void reload_config(const char *arg) {
     }
     initcolors();
     grabkeys();
+    {
+        XFontStruct *nf = XLoadQueryFont(dpy, title_font);
+        if (nf) {
+            XFreeFont(dpy, font);
+            font = nf;
+            XSetFont(dpy, gc, font->fid);
+        }
+    }
     updateframes();
     arrange(selmon);
 }
@@ -2109,7 +2118,7 @@ static void setup(void) {
     wa.background_pixel = col_move_indicator;
     wa.border_pixel = col_sel_outer_border;
     indicator_win = XCreateWindow(dpy, root, 0, 0, 1, 1, 2, CopyFromParent, InputOutput, CopyFromParent, CWOverrideRedirect | CWBackPixel | CWBorderPixel, &wa);
-    font = XLoadQueryFont(dpy, "fixed");
+    font = XLoadQueryFont(dpy, title_font);
     if (!font) die("mriya: cannot load font");
     gc = XCreateGC(dpy, root, 0, NULL);
     XSetFont(dpy, gc, font->fid);
