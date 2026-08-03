@@ -61,6 +61,9 @@ call : mod + f : togglemaximize
 call : mod + Shift + f : togglefullscreen
 call : mod + Tab : view
 
+mousebind : mod + Button1 : movemouse
+mousebind : mod + Button3 : resizemouse
+
 workspace : mod + 1 : view 1
 workspace : mod + 2 : view 2
 workspace : mod + 3 : view 3
