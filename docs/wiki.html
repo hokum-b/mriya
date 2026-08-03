@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mriya wiki</title>
+
+  <style>
+    @font-face {
+      font-family: "Terminus";
+      src: url("fonts/ter-u16n.otb") format("opentype");
+      font-weight: 400;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Terminus";
+      src: url("fonts/ter-u16b.otb") format("opentype");
+      font-weight: 700;
+      font-display: swap;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      background: #111111;
+      color: #ffffff;
+      font-family: "Terminus", monospace;
+
+      display: flex;
+    }
+
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: #111111;
+
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-title {
+      font-size: 1rem;
+      font-weight: 700;
+      text-align: left;
+      padding: 1.25rem 0 1.25rem 1.5rem;
+    }
+
+    .toc {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .toc a {
+      color: #cccccc;
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 0.3rem 0.5rem;
+    }
+
+    .toc a:hover {
+      color: #ffffff;
+      background: #222222;
+    }
+
+    .go-back {
+      margin: 1rem 0 1rem 1rem;
+      padding: 0.6rem 0.5rem;
+      text-align: left;
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .go-back:hover {
+      background: #222222;
+      opacity: 0.85;
+    }
+
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 3rem 1rem;
+    }
+
+    .content {
+      max-width: 700px;
+      width: 100%;
+      line-height: 1.8;
+      text-align: left;
+    }
+
+    .section-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #ffffff;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin: 2rem 0 0.75rem;
+      color: #ffffff;
+      scroll-margin-top: 1rem;
+    }
+
+    p, li {
+      color: #cccccc;
+    }
+
+    ul {
+      padding-left: 1.25rem;
+    }
+
+    li {
+      margin-bottom: 0.35rem;
+    }
+
+    code {
+      background: #222222;
+      padding: 0.1rem 0.35rem;
+      font-family: "Terminus", monospace;
+      font-size: 0.85em;
+      color: #ede5d4;
+    }
+
+    pre {
+      background: #222222;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #333333;
+        max-height: 40vh;
+      }
+
+      .main {
+        padding: 2rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-title">contents</div>
+
+    <div class="toc">
+      <a href="#features">features</a>
+      <a href="#window-states">window states</a>
+      <a href="#controls">controls</a>
+      <a href="#keybindings">keybindings</a>
+      <a href="#config">config</a>
+      <a href="#settings">settings</a>
+      <a href="#directives">directives</a>
+      <a href="#examples">examples</a>
+      <a href="#built-in-actions">built-in actions</a>
+      <a href="#build">build</a>
+      <a href="#run">run</a>
+      <a href="#notes">notes</a>
+    </div>
+
+    <a class="go-back" href="index.html">go back</a>
+  </nav>
+
+  <main class="main">
+    <div class="content">
+
+      <div class="section-title">what is mriya</div>
+      <p>
+        mriya is a scrolling x11 window manager written in c.
+        windows are arranged on a horizontal ribbon-style strip.
+        the user scrolls through this strip instead of stacking windows in columns.
+        mriya is heavily inspired by niri and i3.
+      </p>
+
+      <h2 id="features">features</h2>
+      <ul>
+        <li>horizontal tiled strip that scrolls left and right.</li>
+        <li>up to ten workspaces.</li>
+        <li>window states of normal, floating, maximized, and fullscreen.</li>
+        <li>per-window titlebars with close and maximize buttons.</li>
+        <li>configurable colors, gaps, borders, and snapping.</li>
+        <li>keybindings, autostart commands, and layout settings in a plain text config.</li>
+        <li>hot reload of the config at runtime.</li>
+        <li>ewmh support for standard window managers.</li>
+      </ul>
+
+      <h2 id="window-states">window states</h2>
+      <ul>
+        <li>normal, tiled on the strip.</li>
+        <li>floating, free to move and resize with the mouse.</li>
+        <li>maximized, a single wide window on the strip.</li>
+        <li>fullscreen, covers the whole monitor.</li>
+      </ul>
+
+      <h2 id="controls">controls</h2>
+      <ul>
+        <li>focus moves left or right along the strip.</li>
+        <li>scroll left and right when the strip is wider than the screen.</li>
+        <li>drag tiled windows to reorder them.</li>
+        <li>drag floating windows to move them.</li>
+        <li>resize windows with the mouse.</li>
+        <li>titlebar buttons close and maximize the focused window.</li>
+      </ul>
+
+      <h2 id="keybindings">keybindings</h2>
+      <ul>
+        <li>default bindings use the super modifier, short mod.</li>
+        <li>mod plus shift plus return spawns a terminal.</li>
+        <li>mod plus d spawns dmenu.</li>
+        <li>mod plus h j k l move focus.</li>
+        <li>mod plus up and down switch workspaces.</li>
+        <li>mod plus shift plus j and k change gaps.</li>
+        <li>mod plus space zooms to the master window.</li>
+        <li>mod plus shift plus space toggles floating.</li>
+        <li>mod plus f toggles maximize.</li>
+        <li>mod plus shift plus f toggles fullscreen.</li>
+        <li>mod plus tab cycles views.</li>
+        <li>mod plus 1 through 9 views a workspace.</li>
+        <li>mod plus shift plus 1 through 9 tags the focused window.</li>
+      </ul>
+
+      <h2 id="config">config</h2>
+      <p>
+        config lives at <code>$XDG_CONFIG_HOME/mriya/mriya.rc</code>, else <code>$HOME/.config/mriya/mriya.rc</code>.
+        a fallback lives at <code>/etc/mriya/mriya.rc</code>.
+        on first run a default config is written if none exists.
+      </p>
+      <p>
+        directives use a key colon value format.
+        colors are written as hex values like <code>#222222</code>.
+        numbers are written as integers.
+        a line starting with a hash is a comment.
+      </p>
+
+      <h2 id="settings">settings</h2>
+      <ul>
+        <li><code>norm_bg</code> sets the background color for unfocused windows.</li>
+        <li><code>sel_bg</code> sets the background color for focused windows.</li>
+        <li><code>norm_outer_border</code> sets the outer border color for unfocused windows.</li>
+        <li><code>sel_outer_border</code> sets the outer border color for focused windows.</li>
+        <li><code>norm_inner_border</code> sets the inner border color for unfocused windows.</li>
+        <li><code>sel_inner_border</code> sets the inner border color for focused windows.</li>
+        <li><code>urgent_color</code> sets the color of urgent windows.</li>
+        <li><code>title_active_bg</code> sets the background of the focused titlebar.</li>
+        <li><code>title_active_fg</code> sets the text color of the focused titlebar.</li>
+        <li><code>title_inactive_bg</code> sets the background of unfocused titlebars.</li>
+        <li><code>title_inactive_fg</code> sets the text color of unfocused titlebars.</li>
+        <li><code>inner_gap</code> sets the gap between windows.</li>
+        <li><code>outer_gap</code> sets the gap at the screen edges.</li>
+        <li><code>snap</code> sets the snapping distance for window edges.</li>
+        <li><code>outer_border_width</code> sets the outer border width.</li>
+        <li><code>inner_border_width</code> sets the inner border width.</li>
+        <li><code>border_width</code> sets both borders to one width.</li>
+        <li><code>total_border_width</code> sets the full border width.</li>
+        <li><code>show_titlebar</code> toggles titlebars, 1 on or 0 off.</li>
+        <li><code>show_title</code> toggles the title text.</li>
+        <li><code>show_buttons</code> toggles the titlebar buttons.</li>
+        <li><code>insert_end</code> toggles whether new windows attach at the end.</li>
+        <li><code>strip_align</code> sets strip alignment, 0 left, 1 right, else center.</li>
+        <li><code>show_move_indicator</code> toggles the move indicator overlay.</li>
+        <li><code>move_indicator_color</code> sets the move indicator color.</li>
+        <li><code>mod_key</code> sets the mod key, super, alt, ctrl, or shift.</li>
+      </ul>
+
+      <h2 id="directives">directives</h2>
+      <ul>
+        <li><code>autostart</code> runs a command on startup.</li>
+        <li><code>bind</code> runs an external command when a chord is pressed.</li>
+        <li><code>call</code> runs a built-in action when a chord is pressed.</li>
+        <li><code>workspace</code> maps a chord to a view or tag action.</li>
+      </ul>
+      <p>
+        chords use the mod word plus optional shift, ctrl, alt, super.
+        the full syntax is key plus key plus key colon value.
+      </p>
+
+      <h2 id="examples">examples</h2>
+      <pre><code>bind : mod + shift + return : alacritty
+
+call : mod + space : zoom
+
+workspace : mod + 1 : view 1
+workspace : mod + shift + 1 : tag 1</code></pre>
+
+      <h2 id="built-in-actions">built-in actions</h2>
+      <ul>
+        <li><code>close_window</code> closes the focused window.</li>
+        <li><code>quit</code> exits mriya.</li>
+        <li><code>restartwm</code> restarts mriya.</li>
+        <li><code>reload_config</code> reloads the config.</li>
+        <li><code>focusleft</code> moves focus left.</li>
+        <li><code>focusright</code> moves focus right.</li>
+        <li><code>ws_up</code> goes to the previous workspace.</li>
+        <li><code>ws_down</code> goes to the next workspace.</li>
+        <li><code>inc_gaps</code> increases gaps.</li>
+        <li><code>dec_gaps</code> decreases gaps.</li>
+        <li><code>zero_gaps</code> resets gaps.</li>
+        <li><code>zoom</code> moves the focused window to the master position.</li>
+        <li><code>togglefloating</code> toggles floating state.</li>
+        <li><code>togglemaximize</code> toggles maximized state.</li>
+        <li><code>togglefullscreen</code> toggles fullscreen state.</li>
+        <li><code>view</code> switches the visible workspace.</li>
+        <li><code>tag</code> assigns the focused window to a workspace.</li>
+      </ul>
+
+      <h2 id="build">build</h2>
+      <p>
+        <code>make</code> builds the mriya binary.
+        <code>make install</code> installs mriya to <code>/usr/local/bin</code>.
+        mriya links against xlib.
+        development packages needed are libx11-devel, libxkbfile-devel, and libxkbcommon-devel.
+        alsamixer and brightnessctl are optional for volume and brightness keys.
+      </p>
+
+      <h2 id="run">run</h2>
+      <p>
+        <code>startx mriya</code> runs the window manager.
+        for a display manager create <code>/usr/share/xsessions/mriya.desktop</code>.
+        the desktop entry exec is mriya.
+      </p>
+
+      <h2 id="notes">notes</h2>
+      <ul>
+        <li>mriya is tested on linux, freebsd, netbsd, and openindiana.</li>
+        <li>mriya is licensed under the 3 clause bsd license.</li>
+        <li>some distros do not put /usr/local/bin on the default path.</li>
+      </ul>
+
+    </div>
+  </main>
+
+</body>
+</html>
