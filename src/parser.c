@@ -36,8 +36,6 @@ extern int show_title;
 extern int show_buttons;
 extern int insert_end;
 extern int strip_align;
-extern int show_move_indicator;
-extern char move_indicator_color[64];
 extern unsigned int default_modkey;
 
 typedef struct {
@@ -449,6 +447,7 @@ static void handle_setting(const char *key, char *value) {
     else if (!strcmp(key, "border_width")) {
         outer_border_width = atoi(value);
         inner_border_width = 0;
+        border_width = atoi(value);
     }
     else if (!strcmp(key, "total_border_width") || !strcmp(key, "border"))
         border_width = atoi(value);
@@ -462,10 +461,6 @@ static void handle_setting(const char *key, char *value) {
         insert_end = atoi(value);
     else if (!strcmp(key, "strip_align"))
         strip_align = atoi(value);
-    else if (!strcmp(key, "show_move_indicator"))
-        show_move_indicator = atoi(value);
-    else if (!strcmp(key, "move_indicator_color"))
-        assign_color(move_indicator_color, value);
     else if (!strcmp(key, "mod_key") || !strcmp(key, "modkey")) {
         if (!strcmp(value, "super")) default_modkey = Mod4Mask;
         else if (!strcmp(value, "alt")) default_modkey = Mod1Mask;

@@ -168,8 +168,6 @@ int show_title = 1;
 int show_buttons = 1;
 int insert_end = 1;
 int strip_align = 0;
-int show_move_indicator = 1;
-char move_indicator_color[64] = "#ede5d4";
 static unsigned int numlockmask = 0;
 
 static unsigned long col_norm_bg;
@@ -183,8 +181,6 @@ static unsigned long col_title_active_bg;
 static unsigned long col_title_active_fg;
 static unsigned long col_title_inactive_bg;
 static unsigned long col_title_inactive_fg;
-static unsigned long col_move_indicator;
-static Window indicator_win = None;
 static GC gc;
 static XFontStruct *font;
 
@@ -802,22 +798,27 @@ static void resize(Client *c, int x, int y, int w, int h, int interact) {
     c->width = w;
     c->height = h;
     int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
+    int bw = (c->state == STATE_FULLSCREEN || c->ispanel) ? 0 : border_width;
     int frame_w = w;
     int frame_h = h + title_h;
-    int client_x = 0;
-    int client_y = title_h;
+    int client_x = bw;
+    int client_y = title_h + bw;
+    int cw = w - 2 * bw;
+    int chh = h - 2 * bw;
+    if (cw < 1) cw = 1;
+    if (chh < 1) chh = 1;
 
     if (c->frame) {
         XMoveResizeWindow(dpy, c->frame, x, y, frame_w, frame_h);
-        XMoveResizeWindow(dpy, c->window, client_x, client_y, w, h);
+        XMoveResizeWindow(dpy, c->window, client_x, client_y, cw, chh);
         drawtitle(c);
     } else {
         XWindowChanges wc;
-        wc.x = x;
-        wc.y = y;
-        wc.width = w;
-        wc.height = h;
-        wc.border_width = c->border_width;
+        wc.x = x + client_x;
+        wc.y = y + client_y;
+        wc.width = cw;
+        wc.height = chh;
+        wc.border_width = bw;
         XConfigureWindow(dpy, c->window, CWX|CWY|CWWidth|CWHeight|CWBorderWidth, &wc);
     }
     configure(c);
@@ -830,11 +831,20 @@ static void configure(Client *c) {
     ce.display = dpy;
     ce.event = c->window;
     ce.window = c->window;
-    ce.x = 0;
-    ce.y = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
-    ce.width = c->width;
-    ce.height = c->height;
-    ce.border_width = c->border_width;
+    int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
+    int bw = (c->state == STATE_FULLSCREEN || c->ispanel) ? 0 : border_width;
+    if (c->frame) {
+        ce.x = bw;
+        ce.y = title_h + bw;
+    } else {
+        ce.x = c->x + bw;
+        ce.y = c->y + bw;
+    }
+    int cw = c->width - 2 * bw;
+    int chh = c->height - 2 * bw;
+    ce.width = cw < 1 ? 1 : cw;
+    ce.height = chh < 1 ? 1 : chh;
+    ce.border_width = c->frame ? 0 : bw;
     ce.above = None;
     ce.override_redirect = False;
     XSendEvent(dpy, c->window, False, StructureNotifyMask, (XEvent *)&ce);
@@ -1087,7 +1097,7 @@ static void manage(Window w, XWindowAttributes *wa) {
 
     if (c->ispanel || is_transient || !show_titlebar) {
         c->frame = None;
-        XSetWindowBorder(dpy, w, c->border_width > 0 ? c->border_width : 0);
+        XSetWindowBorder(dpy, w, c->ispanel ? 0 : c->border_width);
     } else {
         XSetWindowAttributes frame_attr;
         frame_attr.override_redirect = True;
@@ -1151,7 +1161,7 @@ static void reframe(Client *c) {
         XReparentWindow(dpy, c->window, root, c->x, c->y + TITLE_HEIGHT);
         XDestroyWindow(dpy, c->frame);
         c->frame = None;
-        XSetWindowBorder(dpy, c->window, c->border_width > 0 ? c->border_width : 0);
+        XSetWindowBorder(dpy, c->window, c->ispanel ? 0 : c->border_width);
         XSetErrorHandler(xerror);
     }
 }
@@ -1453,13 +1463,6 @@ void movemouse(const char *arg) {
     int orig_scroll_x = selmon->scroll_x;
     int dragging = 0;
 
-    if (show_move_indicator && indicator_win != None) {
-        int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
-        XMoveResizeWindow(dpy, indicator_win, c->x, c->y, c->width, c->height + title_h);
-        XMapWindow(dpy, indicator_win);
-        XRaiseWindow(dpy, indicator_win);
-    }
-
     do {
         XMaskEvent(dpy, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
         switch (ev.type) {
@@ -1556,19 +1559,10 @@ void movemouse(const char *arg) {
                     }
                 }
             }
-            if (show_move_indicator && indicator_win != None) {
-                int title_h = (c->state == STATE_FULLSCREEN || c->ispanel || !c->frame) ? 0 : TITLE_HEIGHT;
-                int ix = (c->state == STATE_FLOATING) ? nx : c->x;
-                int iy = (c->state == STATE_FLOATING) ? ny : c->y;
-                XMoveResizeWindow(dpy, indicator_win, ix, iy, c->width, c->height + title_h);
-                XRaiseWindow(dpy, indicator_win);
-            }
             break;
         }
     } while (ev.type != ButtonRelease);
 done_move:
-    if (show_move_indicator && indicator_win != None)
-        XUnmapWindow(dpy, indicator_win);
     XUngrabPointer(dpy, CurrentTime);
 }
 
@@ -1971,7 +1965,6 @@ void initcolors(void) {
     XAllocNamedColor(dpy, cmap, title_active_fg, &color, &color);   col_title_active_fg = color.pixel;
     XAllocNamedColor(dpy, cmap, title_inactive_bg, &color, &color); col_title_inactive_bg = color.pixel;
     XAllocNamedColor(dpy, cmap, title_inactive_fg, &color, &color); col_title_inactive_fg = color.pixel;
-    XAllocNamedColor(dpy, cmap, move_indicator_color, &color, &color); col_move_indicator = color.pixel;
 }
 
 static int ignorewindow(Window w) {
@@ -2129,9 +2122,6 @@ static void setup(void) {
         load_default_config();
     initcolors();
     wa.override_redirect = True;
-    wa.background_pixel = col_move_indicator;
-    wa.border_pixel = col_sel_outer_border;
-    indicator_win = XCreateWindow(dpy, root, 0, 0, 1, 1, 2, CopyFromParent, InputOutput, CopyFromParent, CWOverrideRedirect | CWBackPixel | CWBorderPixel, &wa);
     font = XLoadQueryFont(dpy, title_font);
     if (!font) die("mriya: cannot load font");
     gc = XCreateGC(dpy, root, 0, NULL);
@@ -2223,7 +2213,6 @@ static void cleanup(void) {
     XFreeFont(dpy, font);
     XFreeGC(dpy, gc);
     XDestroyWindow(dpy, wmcheckwin);
-    if (indicator_win != None) XDestroyWindow(dpy, indicator_win);
     XSetInputFocus(dpy, PointerRoot, RevertToPointerRoot, CurrentTime);
     XCloseDisplay(dpy);
 }
