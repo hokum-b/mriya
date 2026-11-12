@@ -100,7 +100,6 @@ typedef struct {
 void spawn(const char *arg);
 void killclient(const char *arg);
 void quit(const char *arg);
-void restartwm(const char *arg);
 void focusleft(const char *arg);
 void focusright(const char *arg);
 void ws_up(const char *arg);
@@ -154,7 +153,6 @@ static int sw, sh;
 static Monitor *mons = NULL;
 static Monitor *selmon = NULL;
 static int running = 1;
-static int restart = 0;
 static int shutting_down = 0;
 static volatile sig_atomic_t need_rekey = 0;
 static int rekey_pipe[2] = { -1, -1 };
@@ -247,7 +245,6 @@ static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void configure(Client *c);
 void resizemouse(const char *arg);
 static void restack(Monitor *m);
-void restartwm(const char *arg);
 static void run(void);
 static void scan(void);
 static int ignorewindow(Window w);
@@ -1158,6 +1155,8 @@ static void manage(Window w, XWindowAttributes *wa) {
                                  CopyFromParent, InputOutput, CopyFromParent,
                                  CWOverrideRedirect | CWBackPixel | CWEventMask, &frame_attr);
         XSelectInput(dpy, c->frame, ButtonPressMask | ExposureMask | EnterWindowMask);
+        if (wa->map_state != IsUnmapped)
+            c->ignore_unmap++;
         XReparentWindow(dpy, w, c->frame, 0, TITLE_HEIGHT);
         wc.border_width = 0;
         XConfigureWindow(dpy, w, CWBorderWidth, &wc);
@@ -2560,7 +2559,6 @@ static void cleanup(void) {
     nautostart = 0;
     if (rekey_pipe[0] >= 0) close(rekey_pipe[0]);
     if (rekey_pipe[1] >= 0) close(rekey_pipe[1]);
-    spawn("systemctl --user stop mriya-session.target 2>/dev/null");
     XUngrabKey(dpy, AnyKey, AnyModifier, root);
     XFreeCursor(dpy, cursor_normal);
     XFreeCursor(dpy, cursor_move);
@@ -2577,21 +2575,12 @@ void quit(const char *arg) {
     running = 0;
 }
 
-void restartwm(const char *arg) {
-    (void)arg;
-    restart = 1;
-    running = 0;
-}
-
 int main(int argc, char *argv[]) {
     (void)argc;
+    (void)argv;
     if (!(dpy = XOpenDisplay(NULL))) die("mriya: cannot open display");
     setup();
     run();
     cleanup();
-    if (restart) {
-        execvp(argv[0], argv);
-        die("mriya: failed to restart");
-    }
     return 0;
 }
