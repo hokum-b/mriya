@@ -2,8 +2,6 @@
 
 is a scrolling x11 window manager.
 
-SORRY ABOUT THE HALT OF DEVELOPMENT / REWRITE SOON!!!
-
 ![License](https://img.shields.io/badge/license-BSD3C-blue.svg)
 
 <p align="center">
