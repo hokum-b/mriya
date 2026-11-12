@@ -66,7 +66,6 @@ extern int nautostart;
 
 extern void killclient(const char *arg);
 extern void quit(const char *arg);
-extern void restartwm(const char *arg);
 extern void reload_config(const char *arg);
 extern void focusleft(const char *arg);
 extern void focusright(const char *arg);
@@ -95,8 +94,6 @@ static const FuncMap func_table[] = {
     {"close_window", killclient, NULL},
     {"killclient", killclient, NULL},
     {"quit", quit, NULL},
-    {"restartwm", restartwm, NULL},
-    {"restart", restartwm, NULL},
     {"reload_config", reload_config, NULL},
     {"reload", reload_config, NULL},
     {"focusleft", focusleft, NULL},
@@ -171,7 +168,6 @@ static const char default_config_content[] =
 "call : mod + w : close_window\n"
 "call : mod + Shift + q : close_window\n"
 "call : mod + Shift + e : quit\n"
-"call : mod + Shift + r : restartwm\n"
 "call : mod + r : reload_config\n"
 "\n"
 "call : mod + h : focusleft\n"
@@ -500,31 +496,10 @@ static void ensure_portal_support(void) {
         }
     }
 
-    if (home && *home) {
-        snprintf(path, sizeof(path), "%s/.config/systemd/user/mriya-session.target", home);
-        if (access(path, F_OK) != 0) {
-            make_parent_dir(path);
-            f = fopen(path, "w");
-            if (f) {
-                fprintf(f,
-                    "[Unit]\n"
-                    "Description=Mriya graphical session\n"
-                    "BindsTo=graphical-session.target\n"
-                    "Wants=graphical-session-pre.target\n"
-                    "After=graphical-session-pre.target\n");
-                fclose(f);
-            }
-        }
-    }
-
     spawn(
-        "systemctl --user import-environment DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP 2>/dev/null; "
         "busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus "
         "UpdateActivationEnvironment 'a{ss}' 3 "
         "\"DISPLAY\" \"$DISPLAY\" \"XAUTHORITY\" \"$XAUTHORITY\" \"XDG_CURRENT_DESKTOP\" \"${XDG_CURRENT_DESKTOP:-GNOME}\" 2>/dev/null; "
-        "systemctl --user daemon-reload 2>/dev/null; "
-        "systemctl --user start mriya-session.target 2>/dev/null; "
-        "systemctl --user start xdg-desktop-portal.service 2>/dev/null; "
         "pgrep -x xdg-desktop-portal >/dev/null 2>&1 || (/usr/libexec/xdg-desktop-portal &) 2>/dev/null"
     );
 }
