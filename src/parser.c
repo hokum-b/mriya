@@ -36,7 +36,10 @@ extern int show_title;
 extern int show_buttons;
 extern int insert_end;
 extern int strip_align;
+extern int theme_mode;
 extern unsigned int default_modkey;
+
+static void ensure_portal_support(void);
 
 typedef struct {
     unsigned int mod;
@@ -131,6 +134,8 @@ static const FuncMap func_table[] = {
 static const char *ws_args[9] = {"0", "1", "2", "3", "4", "5", "6", "7", "8"};
 
 static const char default_config_content[] =
+"theme : 1\n"
+"\n"
 "norm_bg : #222222\n"
 "norm_outer_border : #ede5d4\n"
 "norm_inner_border : #111111\n"
@@ -275,6 +280,8 @@ void ensure_config_files_exist(void) {
     const char *xdg = getenv("XDG_CONFIG_HOME");
     char path[4096];
 
+    ensure_portal_support();
+
     seed_file("/etc/mriya/mriya.rc");
 
     if (xdg && *xdg) {
@@ -409,6 +416,200 @@ static void assign_color(char *target, const char *value) {
     target[63] = '\0';
 }
 
+static int contains_case_tag(const char *haystack, const char *needle) {
+    if (!haystack || !needle) return 0;
+    size_t nlen = strlen(needle);
+    while (*haystack) {
+        if (!strncasecmp(haystack, needle, nlen))
+            return 1;
+        haystack++;
+    }
+    return 0;
+}
+
+static void update_gtk_ini(const char *path, const char *gtk_theme, int dark_pref) {
+    char tmp[4096];
+    char line[512];
+    FILE *in, *out;
+    int has_settings = 0;
+    int wrote_theme = 0;
+    int wrote_dark = 0;
+
+    make_parent_dir(path);
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+
+    in = fopen(path, "r");
+    out = fopen(tmp, "w");
+    if (!out) {
+        if (in) fclose(in);
+        return;
+    }
+
+    if (in) {
+        while (fgets(line, sizeof(line), in)) {
+            char t[512];
+            strncpy(t, line, sizeof(t) - 1);
+            t[sizeof(t) - 1] = '\0';
+            trim(t);
+            if (!strcmp(t, "[Settings]")) {
+                has_settings = 1;
+                fputs(line, out);
+            } else if (!strncmp(t, "gtk-theme-name", 14) && (t[14] == '=' || isspace((unsigned char)t[14]))) {
+                fprintf(out, "gtk-theme-name = %s\n", gtk_theme);
+                wrote_theme = 1;
+            } else if (!strncmp(t, "gtk-application-prefer-dark-theme", 33) && (t[33] == '=' || isspace((unsigned char)t[33]))) {
+                fprintf(out, "gtk-application-prefer-dark-theme = %d\n", dark_pref);
+                wrote_dark = 1;
+            } else {
+                fputs(line, out);
+            }
+        }
+        fclose(in);
+    }
+
+    if (!has_settings)
+        fprintf(out, "[Settings]\n");
+    if (!wrote_theme)
+        fprintf(out, "gtk-theme-name = %s\n", gtk_theme);
+    if (!wrote_dark)
+        fprintf(out, "gtk-application-prefer-dark-theme = %d\n", dark_pref);
+
+    fclose(out);
+    rename(tmp, path);
+}
+
+static void ensure_portal_support(void) {
+    const char *home = getenv("HOME");
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    char path[4096];
+    FILE *f;
+
+    if (xdg && *xdg)
+        snprintf(path, sizeof(path), "%s/xdg-desktop-portal/portals.conf", xdg);
+    else if (home && *home)
+        snprintf(path, sizeof(path), "%s/.config/xdg-desktop-portal/portals.conf", home);
+    else
+        path[0] = '\0';
+
+    if (path[0] && access(path, F_OK) != 0) {
+        make_parent_dir(path);
+        f = fopen(path, "w");
+        if (f) {
+            fprintf(f, "[preferred]\ndefault=gnome;gtk;\norg.freedesktop.impl.portal.Settings=gnome;gtk;\n");
+            fclose(f);
+        }
+    }
+
+    if (home && *home) {
+        snprintf(path, sizeof(path), "%s/.config/systemd/user/mriya-session.target", home);
+        if (access(path, F_OK) != 0) {
+            make_parent_dir(path);
+            f = fopen(path, "w");
+            if (f) {
+                fprintf(f,
+                    "[Unit]\n"
+                    "Description=Mriya graphical session\n"
+                    "BindsTo=graphical-session.target\n"
+                    "Wants=graphical-session-pre.target\n"
+                    "After=graphical-session-pre.target\n");
+                fclose(f);
+            }
+        }
+    }
+
+    spawn(
+        "systemctl --user import-environment DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP 2>/dev/null; "
+        "busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus "
+        "UpdateActivationEnvironment 'a{ss}' 3 "
+        "\"DISPLAY\" \"$DISPLAY\" \"XAUTHORITY\" \"$XAUTHORITY\" \"XDG_CURRENT_DESKTOP\" \"${XDG_CURRENT_DESKTOP:-GNOME}\" 2>/dev/null; "
+        "systemctl --user daemon-reload 2>/dev/null; "
+        "systemctl --user start mriya-session.target 2>/dev/null; "
+        "systemctl --user start xdg-desktop-portal.service 2>/dev/null; "
+        "pgrep -x xdg-desktop-portal >/dev/null 2>&1 || (/usr/libexec/xdg-desktop-portal &) 2>/dev/null"
+    );
+}
+
+static void apply_xdg_theme(const char *theme_val) {
+    const char *color_scheme = "default";
+    const char *gtk_theme = "Adwaita";
+    int dark_pref = 0;
+    char path[4096];
+    char cmd[2048];
+    const char *home = getenv("HOME");
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+
+    ensure_portal_support();
+
+    int mode = -1;
+    if (theme_val && isdigit((unsigned char)theme_val[0]))
+        mode = atoi(theme_val);
+
+    if (mode == 1 || !strcasecmp(theme_val, "dark") || !strcmp(theme_val, "1")) {
+        color_scheme = "prefer-dark";
+        gtk_theme = "Adwaita-dark";
+        dark_pref = 1;
+        theme_mode = 1;
+    } else if (mode == 2 || !strcasecmp(theme_val, "light") || !strcmp(theme_val, "2")) {
+        color_scheme = "prefer-light";
+        gtk_theme = "Adwaita";
+        dark_pref = 0;
+        theme_mode = 2;
+    } else if (mode == 0 || !strcasecmp(theme_val, "default") || !strcasecmp(theme_val, "auto")
+        || !strcasecmp(theme_val, "system") || !strcmp(theme_val, "0")) {
+        color_scheme = "default";
+        gtk_theme = "Adwaita";
+        dark_pref = 0;
+        theme_mode = 0;
+    } else {
+        gtk_theme = theme_val;
+        if (contains_case_tag(theme_val, "dark")) {
+            color_scheme = "prefer-dark";
+            dark_pref = 1;
+            theme_mode = 1;
+        } else if (contains_case_tag(theme_val, "light")) {
+            color_scheme = "prefer-light";
+            dark_pref = 0;
+            theme_mode = 2;
+        } else {
+            color_scheme = "default";
+            dark_pref = 0;
+            theme_mode = 0;
+        }
+    }
+
+    if (xdg && *xdg) {
+        snprintf(path, sizeof(path), "%s/gtk-3.0/settings.ini", xdg);
+        update_gtk_ini(path, gtk_theme, dark_pref);
+        snprintf(path, sizeof(path), "%s/gtk-4.0/settings.ini", xdg);
+        update_gtk_ini(path, gtk_theme, dark_pref);
+    } else if (home && *home) {
+        snprintf(path, sizeof(path), "%s/.config/gtk-3.0/settings.ini", home);
+        update_gtk_ini(path, gtk_theme, dark_pref);
+        snprintf(path, sizeof(path), "%s/.config/gtk-4.0/settings.ini", home);
+        update_gtk_ini(path, gtk_theme, dark_pref);
+    }
+
+    if (home && *home) {
+        snprintf(path, sizeof(path), "%s/.xsettingsd", home);
+        if (access(path, F_OK) == 0) {
+            FILE *xf = fopen(path, "w");
+            if (xf) {
+                fprintf(xf, "Net/ThemeName \"%s\"\n", gtk_theme);
+                fclose(xf);
+                spawn("pkill -HUP xsettingsd 2>/dev/null");
+            }
+        }
+    }
+
+    snprintf(cmd, sizeof(cmd),
+        "gsettings set org.gnome.desktop.interface color-scheme '%s' 2>/dev/null; "
+        "gsettings set org.gnome.desktop.interface gtk-theme '%s' 2>/dev/null; "
+        "dconf write /org/gnome/desktop/interface/color-scheme \"'%s'\" 2>/dev/null; "
+        "dconf write /org/gnome/desktop/interface/gtk-theme \"'%s'\" 2>/dev/null",
+        color_scheme, gtk_theme, color_scheme, gtk_theme);
+    spawn(cmd);
+}
+
 static void handle_setting(const char *key, char *value) {
     if (!strcmp(key, "norm_bg") || !strcmp(key, "normal_bg"))
         assign_color(norm_bg, value);
@@ -461,6 +662,11 @@ static void handle_setting(const char *key, char *value) {
         insert_end = atoi(value);
     else if (!strcmp(key, "strip_align"))
         strip_align = atoi(value);
+    else if (!strcmp(key, "theme")) {
+        unquote(value);
+        trim(value);
+        apply_xdg_theme(value);
+    }
     else if (!strcmp(key, "mod_key") || !strcmp(key, "modkey")) {
         if (!strcmp(value, "super")) default_modkey = Mod4Mask;
         else if (!strcmp(value, "alt")) default_modkey = Mod1Mask;
