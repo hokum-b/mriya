@@ -169,6 +169,7 @@ int show_title = 1;
 int show_buttons = 1;
 int insert_end = 1;
 int strip_align = 0;
+int theme_mode = 0;
 static unsigned int numlockmask = 0;
 static KeyCode keycodes[256];
 
@@ -2304,6 +2305,7 @@ typedef struct {
     int inner_gaps, outer_gaps, snap_val;
     int outer_border_width, inner_border_width, border_width;
     int show_titlebar, show_title, show_buttons, insert_end, strip_align;
+    int theme_mode;
     unsigned int default_modkey;
 } ConfigSnapshot;
 
@@ -2331,6 +2333,7 @@ static void save_config(ConfigSnapshot *s) {
     s->show_buttons = show_buttons;
     s->insert_end = insert_end;
     s->strip_align = strip_align;
+    s->theme_mode = theme_mode;
     s->default_modkey = default_modkey;
 }
 
@@ -2358,6 +2361,7 @@ static void restore_config(const ConfigSnapshot *s) {
     show_buttons = s->show_buttons;
     insert_end = s->insert_end;
     strip_align = s->strip_align;
+    theme_mode = s->theme_mode;
     default_modkey = s->default_modkey;
 }
 
@@ -2556,6 +2560,7 @@ static void cleanup(void) {
     nautostart = 0;
     if (rekey_pipe[0] >= 0) close(rekey_pipe[0]);
     if (rekey_pipe[1] >= 0) close(rekey_pipe[1]);
+    spawn("systemctl --user stop mriya-session.target 2>/dev/null");
     XUngrabKey(dpy, AnyKey, AnyModifier, root);
     XFreeCursor(dpy, cursor_normal);
     XFreeCursor(dpy, cursor_move);
