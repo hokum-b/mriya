@@ -2,6 +2,10 @@
 
 is a scrolling x11 window manager.
 
+# fyi
+
+mriya is highly experimental. it is at a point where it is usable with some tinkering. DO NOT EXPECT SOMETHING ON THE LEVEL OF NIRI AS IT IS A SOLO PROJECT 
+
 ![License](https://img.shields.io/badge/license-BSD3C-blue.svg)
 
 <p align="center">
@@ -67,16 +71,6 @@ edit ```/$HOME/.config/mriya/mriya.rc```
 
 refer to [the website](https://hokum-b.github.io/mriya)
 
-# 1.0 release goals
-
-- [x] stable with little to no crashes.
-- [x] hot reloads
-- [x] proper documentation
-
 # license
 
 mriya is licensed under the [3 Clause BSD License](LICENSE)
-
-# FYI
-
-if you create a fork of mriya, please do not license it under the gpl, if you'd like to read up on why refer to [this article](https://asm-basic-coder.neocities.org/rants/nogoodgpl) (not written by me).
