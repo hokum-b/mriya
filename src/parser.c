@@ -557,6 +557,10 @@ int parse_config(void) {
     f = resolve_config(path, sizeof(path));
     if (!f) return -1;
 
+    for (int i = 0; i < nautostart; i++) {
+        free(autostart_cmds[i]);
+        autostart_cmds[i] = NULL;
+    }
     nkeys = 0;
     nautostart = 0;
 
